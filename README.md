@@ -20,17 +20,12 @@
 ### Content
 
 This repository holds the BMI algorithm which can be impelemented in any data environment following these steps and correct setting of parameters:
-* To extract data from base data sources see <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/ReadMe-Adult.md">this</a> for adults and <a https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/CYP%20code/ReadMe-CYP.md">this</a> for CYP.
+* To extract data from base data sources see <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/ReadMe-Adult.md">this</a> for adults and <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/CYP%20code/ReadMe-CYP.md">this</a> for CYP.
 * To combine and clean data see <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/Adults.sql">this</a> for adults and  <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/CYP%20code/CYP.sql">this</a> for CYP.<br>
-* Same day record cleaning line 1473 <a href="[https://github.com/FatemehTorabi/RRDA-BMI/blob/main/Methodology/Adults.sql](https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/Adults.sql)">this</a> <br>
-|Row	|ALF	 |Date	       |BMI Category	|Data Type	|BMI value	|Flag|
-|1	  |1234a|	2019-01-01	|Overweight	  |BMI value	|28	       |3   |
-|2   |1234a| 2019-01-01	|Normal weight|Weight	   |24	       |3   |
-|3   |1234b| 2020-01-01	|Normal weight|BMI value	|19	       |5   |
-|4	  |1234b|	2020-01-01	|Normal weight|Weight	   |24	       |3   |
-|5   |1234c|	2021-01-01	|Normal weight|BMI value |24	       |    |
-|6   |1234c| 2021-01-01	|Overweight	  |Weight	   |25	       |6   |
-Note: a Different BMI categories and > 5% difference in BMI values. b Same BMI categories, > 5% difference in BMI values. c Different BMI categories, < 5% difference in BMI values. In this fictional data example and cases, the final output will exclude rows 1, 2, and 4.
+* Same day record cleaning line 1473 <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/Adults.sql">here</a>.<br>
+
+![image](https://github.com/SwanseaUniversityDataScience/RRDA-BMI/assets/44894673/020dd765-49b6-4393-9d1b-1ecf0a191f1c)
+
 
 * If you are using this for a limited number of cohort and want to filter by your cohort participants at the start follow <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/V3%20-%20Adults%20with%20cohort%20input.sql">this</a> for adults or <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/CYP%20code/V3%20-%20CYP%20with%20cohort%20input.sql">this</a> for CYP.
 

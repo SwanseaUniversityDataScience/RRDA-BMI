@@ -24,8 +24,7 @@ This repository holds the BMI algorithm which can be impelemented in any data en
 * To combine and clean data see <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/Adults.sql">this</a> for adults and  <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/CYP%20code/CYP.sql">this</a> for CYP.<br>
 * Same day record cleaning line 1473 <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/Adults.sql">here</a>.<br>
 
-![image](https://github.com/SwanseaUniversityDataScience/RRDA-BMI/assets/44894673/020dd765-49b6-4393-9d1b-1ecf0a191f1c)
-
+![Same-day cleaning example](https://github.com/user-attachments/assets/6d2afc98-ea66-48f0-883d-a28d1a877b25)
 
 * If you are using this for a limited number of cohort and want to filter by your cohort participants at the start follow <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/V3%20-%20Adults%20with%20cohort%20input.sql">this</a> for adults or <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/CYP%20code/V3%20-%20CYP%20with%20cohort%20input.sql">this</a> for CYP.
 

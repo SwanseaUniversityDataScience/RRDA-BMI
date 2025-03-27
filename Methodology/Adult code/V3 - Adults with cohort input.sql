@@ -1,9 +1,10 @@
--- BMI source types general extraction and adding cohort in BMI_UNCLEAN
+-- BMI source types general extraction
 -- code modified from BMI_V2 (s.j.aldridge@swansea.ac.uk)
+-- and BMI_V3 to change how same-day entries are flagged and cleaned.
 -- by: m.j.childs@swansea.ac.uk
 
 -- AIMS (and some changes to BMI_V2):
-	-- extracting all BMI related entries between 2000-2021.
+	-- extracting all BMI related entries between 2000-2022.
 	-- date restriction applied on BMI_CAT, BMI_VAL, BMI_HEIGHTWEIGHT, and BMI_PEDW
 	-- source_db column applied to each table (WLGP / MIDS / PEDW)
 -- Note to User: Please read README file that accompanies this code.
@@ -13,11 +14,11 @@
 -----------------------------------------------------------------------------------------------------------------
 
 -------- USER INPUT NEEDED HERE ---------------------------------------------------------------------------------
---1. Create a cohort table in your schema containing a list of alf's and their WOBs. 
+--1. Create a cohort table in your schema containing a list of alf, their week of birth and sex. 
 
 --2. Type the name of your table into the script below under "YOUR_USER_TABLE_GOES_HERE" 
 CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_COHORT
-FOR "YOUR_USER_TABLE_GOES_HERE" ;
+FOR "YOUR_USER_TABLE_GOES_HERE"  ;
 
 -----------------------------------------------------------------------------------------------------------------
 --3. Find and replace all XXXX with your project schema number using ctrl + f
@@ -29,47 +30,41 @@ FOR "YOUR_USER_TABLE_GOES_HERE" ;
 -----------------------------------------------------------------------------------------------------------------
 --5. Create an alias for the most recent versions of the WLGP, PEDW and MIDS event tables as below:
 CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_ALG_GP
-FOR 'YOUR_WLGP_TABLE_GOES_HERE' ;
-
+FOR "SAILWXXXXV.YOUR_WLGP_TABLE_GOES_HERE" ;
 
 CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_ALG_PEDW_SPELL
-FOR 'YOUR_PEDW_SPELL_TABLE_GOES_HERE' ;
-
+FOR "SAILWXXXXV.YOUR_PEDW_SPELL_TABLE_GOES_HERE";
 
 CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_ALG_PEDW_DIAG
-FOR 'YOUR_PEDW_DIAG_TABLE_GOES_HERE' ;
-
+FOR "SAILWXXXXV.YOUR_PEDW_DIAG_TABLE_GOES_HERE";
 
 CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_ALG_MIDS
--- FOR 'YOUR_MIDS_TABLE_GOES_HERE'
+FOR "SAILWXXXXV.YOUR_MIDS_TABLE_GOES_HERE";
 
 CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_ALG_MIDS_BIRTH
-FOR 'YOUR_MIDS_BIRTH_TABLE_GOES_HERE' ;
+FOR "SAILWXXXXV.YOUR_MIDS_BIRTH_TABLE_GOES_HERE";
 
 CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_ALG_NCCH_EXAM
-FOR 'YOUR_NCCH_EXAM_TABLE_GOES_HERE' ;
-
+FOR "SAILWXXXXV.YOUR_NCCH_EXAM_TABLE_GOES_HERE" ;
 
 CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_ALG_NCCH_CHILD_MEASURE
-FOR 'YOUR_NCCH_CHILD_MEASURE_TABLE_GOES_HERE' ;
-
+FOR "SAILWXXXXV.YOUR_NCCH_CHILD_MEASURE_TABLE_GOES_HERE" ;
 
 CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_ALG_NCCH_CHILD_BIRTH
-FOR 'YOUR_NCCH_CHILD_BIRTH_TABLE_GOES_HERE' ;
-
-
+FOR "SAILWXXXXV.YOUR_NCCH_CHILD_BIRTH_TABLE_GOES_HERE" ;
 
 CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_ALG_WDSD
-FOR 'YOUR_WDSD_TABLE_GOES_HERE' ; -- please use single view WDSD.
+FOR "SAILWXXXXV.YOUR_WDSD_TABLE_GOES_HERE" ;
 
-
+CREATE OR REPLACE ALIAS SAILWXXXXV.BMI_ALG_WDSD_ADD
+FOR "SAILWXXXXV.YOUR_WDSD_ADD_TABLE_GOES_HERE" ;
 -----------------------------------------------------------------------------------------------------------------
 --6. Create variables for the earliest and latest dates you want the BMI values for (replace dates as necessary)
 CREATE OR REPLACE VARIABLE SAILWXXXXV.BMI_DATE_FROM  DATE;
-SET SAILWXXXXV.BMI_DATE_FROM = 'YYYY-MM-DD' ; 
+SET SAILWXXXXV.BMI_DATE_FROM = 'YYYY-MM-DD' ;
 
 CREATE OR REPLACE VARIABLE SAILWXXXXV.BMI_DATE_TO  DATE;
-SET SAILWXXXXV.BMI_DATE_TO = 'YYYY-MM-DD' ; 
+SET SAILWXXXXV.BMI_DATE_TO = 'YYYY-MM-DD' ;
 
 --7. Optional -- Assign your acceptable ranges for bmi at:
 -- same day variation - default = 0.05
@@ -79,7 +74,8 @@ CREATE OR REPLACE VARIABLE SAILWXXXXV.BMI_SAME_DAY DOUBLE DEFAULT 0.05;
 CREATE OR REPLACE VARIABLE SAILWXXXXV.BMI_RATE DOUBLE DEFAULT 0.003; 
 
 -----------------------------------------------------------------------------------------------------------------
---8. Create lookup table -- feel free to review the codes listed below and make any changes
+--8. Optional --- Create lookup table -- feel free to review the codes listed below and make any changes
+
 CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_LOOKUP');
 
 CREATE TABLE SAILWXXXXV.BMI_LOOKUP
@@ -102,10 +98,10 @@ VALUES
 ('2293.', 'O/E -height within 10% average', 'where event_val between x and y (depending on unit)', 'height'),
 ('229..', 'O/E - height', 'where event_val between x and y (depending on unit)', 'height'),
 ('229Z.', 'O/E - height NOS', 'where event_val between x and y (depending on unit)', 'height'),
-('2292.', 'O/E - height 10-20% < average', 'height', 'height'),
-('2294.', 'O/E - height 10-20% over average', 'height', 'height'),
-('2295.', 'O/E - height > 20% over average', 'height', 'height'),
-('2291.', 'O/E - height > 20% below average', 'height', 'height'),
+('2292.', 'O/E - height 10-20% < average', 'included, but only 6 records', 'height'),
+('2294.', 'O/E - height 10-20% over average', 'included, but only 1 records', 'height'),
+('2295.', 'O/E - height > 20% over average', 'included, but only 4 records', 'height'),
+('2291.', 'O/E - height > 20% below average', 'included, but only 23 records', 'height'),
 ('22A..', 'O/E - weight', 'where event_val between 32 and 250', 'weight'),
 ('22A1.', 'O/E - weight > 20% below ideal', 'where event_val between 32 and 250', 'weight'),
 ('22A2.', 'O/E - weight 10-20% below ideal', 'where event_val between 32 and 250', 'weight'),
@@ -184,7 +180,6 @@ VALUES
 -----------------------------------------------------------------------------------------------------------------
 -- 9. Drop final BMI table if it exists using the code below
 -----------------------------------------------------------------------------------------------------------------
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_UNCLEAN_ADULTS');
 CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_CLEAN_ADULTS');
 
 ------------------------------------------------------------------------------------------------------------------
@@ -195,11 +190,12 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_CLEAN_ADULTS');
 -- these will then be put together using UNION ALL to make the BMI_CAT table.
 ------------------------------------------------------------------------------------------------------------------
 --1a. table for normal underweight
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_UNDERWEIGHT');
+CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_underweight');
 
 CREATE TABLE SAILWXXXXV.BMI_UNDERWEIGHT
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		bmi_dt     		DATE,
 		bmi_cat			VARCHAR(13),
@@ -211,41 +207,28 @@ DISTRIBUTE BY HASH(ALF_E);
 COMMIT;
 
 INSERT INTO SAILWXXXXV.BMI_UNDERWEIGHT
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
-	wob,
-	bmi_dt,
-	bmi_cat,
-	bmi_c,
-	bmi_val,
-	source_db
-FROM
+SELECT -- extracting those categorised as underweight
+	DISTINCT cohort.*,
+	event_dt AS bmi_dt, 
+	'Underweight' AS bmi_cat, 
+	'1' AS bmi_c,
+	CASE 
+		WHEN event_val >= 12 	AND event_val < 18.50 	THEN event_val 
+		WHEN event_val IS NULL 							THEN NULL
+		ELSE 9999
+		END AS bmi_val,
+	'WLGP' AS source_db
+FROM 
 	SAILWXXXXV.BMI_COHORT cohort
 LEFT JOIN
-	(	
-	-- extracting those categorised as underweight
-	SELECT 
-		DISTINCT (ALF_E), 
-		event_dt AS bmi_dt, 
-		'Underweight' AS bmi_cat, 
-		'1' AS bmi_c,
-		CASE 
-			WHEN event_val >= 12 	AND event_val < 18.50 	THEN event_val 
-			WHEN event_val IS NULL 							THEN NULL
-			END AS bmi_val,
-		'WLGP' AS source_db
-	FROM 
-		SAILWXXXXV.BMI_ALG_GP a
-	INNER JOIN 
-		SAILWXXXXV.BMI_lookup b
-	ON a.event_cd = b.bmi_code AND b.category = 'underweight'
-	WHERE 
-		a.event_dt BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO
-	AND	alf_sts_cd IN ('1', '4', '39')
-	) a
--- joining the BMI information to your cohort
+	SAILWXXXXV.BMI_alg_gp a
 ON cohort.alf_e = a.alf_e
+INNER JOIN 
+	SAILWXXXXV.BMI_lookup b
+ON a.event_cd = b.bmi_code AND b.category = 'underweight'
+WHERE 
+	a.event_dt BETWEEN SAILWXXXXV.BMI_date_from AND SAILWXXXXV.BMI_date_to
+AND	alf_sts_cd IN ('1', '4', '39')
 ;
 
 COMMIT;
@@ -257,6 +240,7 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_NORMALWEIGHT');
 CREATE TABLE SAILWXXXXV.BMI_NORMALWEIGHT
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		bmi_dt     		DATE,
 		bmi_cat			VARCHAR(13),
@@ -268,39 +252,28 @@ DISTRIBUTE BY HASH(ALF_E);
 COMMIT;
 
 INSERT INTO SAILWXXXXV.BMI_NORMALWEIGHT
--- Your ALFs are here:
 SELECT
-	cohort.alf_e,
-	wob,
-	bmi_dt,
-	bmi_cat,
-	bmi_c,
-	bmi_val,
-	source_db
-FROM
+	DISTINCT cohort.*,
+	event_dt AS bmi_dt, 
+	'Normal weight' AS bmi_cat, 
+	'2' AS bmi_c,
+	CASE 
+		WHEN event_val >= 18.5 AND event_val < 25 		THEN event_val 
+		WHEN event_val IS NULL 							THEN NULL
+		ELSE 9999
+		END AS bmi_val,
+	'WLGP' AS source_db
+FROM 
 	SAILWXXXXV.BMI_COHORT cohort
 LEFT JOIN
-	(	
-	SELECT
-		DISTINCT (ALF_E), 
-		event_dt AS bmi_dt, 
-		'Normal weight' AS bmi_cat, 
-		'2' AS bmi_c,
-		CASE 
-			WHEN event_val >= 18.5 AND event_val < 25 		THEN event_val 
-			WHEN event_val IS NULL 							THEN NULL
-			END AS bmi_val,
-		'WLGP' AS source_db
-	FROM 
-		SAILWXXXXV.BMI_ALG_GP a
-	RIGHT JOIN 
-		SAILWXXXXV.BMI_lookup b
-	ON a.event_cd = b.bmi_code AND b.category = 'normal weight'
-	WHERE 
-		a.event_dt BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO
-		AND	alf_sts_cd IN ('1', '4', '39')
-	) a
+	SAILWXXXXV.BMI_alg_gp a
 ON cohort.alf_e = a.alf_e
+INNER JOIN 
+	SAILWXXXXV.BMI_lookup b
+ON a.event_cd = b.bmi_code AND b.category = 'normal weight'
+WHERE 
+	a.event_dt BETWEEN SAILWXXXXV.BMI_date_from AND SAILWXXXXV.BMI_date_to
+AND	alf_sts_cd IN ('1', '4', '39')
 ;
 
 
@@ -310,6 +283,7 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_OVERWEIGHT');
 CREATE TABLE SAILWXXXXV.BMI_OVERWEIGHT
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		bmi_dt     		DATE,
 		bmi_cat			VARCHAR(13),
@@ -321,39 +295,28 @@ DISTRIBUTE BY HASH(ALF_E);
 COMMIT;
 
 INSERT INTO SAILWXXXXV.BMI_OVERWEIGHT
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
-	wob,
-	bmi_dt,
-	bmi_cat,
-	bmi_c,
-	bmi_val,
-	source_db
-FROM
+SELECT 
+	DISTINCT cohort.*,
+	event_dt AS bmi_dt, 
+	'Overweight' AS bmi_cat, 
+	'3' AS bmi_c,
+	CASE 
+		WHEN event_val >= 25 AND event_val < 30 		THEN event_val 
+		WHEN event_val IS NULL 							THEN NULL
+		ELSE 9999
+		END AS bmi_val,
+	'WLGP' AS source_db
+FROM 
 	SAILWXXXXV.BMI_COHORT cohort
 LEFT JOIN
-	(	
-	SELECT 
-		DISTINCT (ALF_E), 
-		event_dt AS bmi_dt, 
-		'Overweight' AS bmi_cat, 
-		'3' AS bmi_c,
-		CASE 
-			WHEN event_val >= 25 AND event_val < 30 		THEN event_val 
-			WHEN event_val IS NULL 							THEN NULL
-			END AS bmi_val,
-		'WLGP' AS source_db
-	FROM 
-		SAILWXXXXV.BMI_ALG_GP a
-	RIGHT JOIN 
-		SAILWXXXXV.BMI_lookup b
-	ON a.event_cd = b.bmi_code AND b.category = 'overweight'
-	WHERE 
-		a.event_dt BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO
-	AND	alf_sts_cd IN ('1', '4', '39')
-	) a
+	SAILWXXXXV.BMI_alg_gp a
 ON cohort.alf_e = a.alf_e
+INNER JOIN 
+	SAILWXXXXV.BMI_lookup b
+ON a.event_cd = b.bmi_code AND b.category = 'overweight'
+WHERE 
+	a.event_dt BETWEEN SAILWXXXXV.BMI_date_from AND SAILWXXXXV.BMI_date_to
+AND	alf_sts_cd IN ('1', '4', '39')
 ;
 
 COMMIT;
@@ -364,11 +327,12 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_OBESE');
 CREATE TABLE SAILWXXXXV.BMI_OBESE
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		bmi_dt     		DATE,
 		bmi_cat			VARCHAR(13),
 		bmi_c			CHAR(1),
-		bmi_val			DECIMAL(10),
+		bmi_val			DECIMAL(5),
 		source_db		VARCHAR(12)
 )
 DISTRIBUTE BY HASH(ALF_E);
@@ -377,41 +341,29 @@ COMMIT;
 ALTER TABLE SAILWXXXXV.BMI_OBESE activate not logged INITIALLY;
 
 INSERT INTO SAILWXXXXV.BMI_OBESE
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
-	wob,
-	bmi_dt,
-	bmi_cat,
-	bmi_c,
-	bmi_val,
-	source_db
-FROM
+SELECT 
+	DISTINCT cohort.*,
+	event_dt AS bmi_dt, 
+	'Obese' AS bmi_cat, 
+	'4' AS bmi_c,
+	CASE 
+		WHEN event_val > 30 AND event_val < 100 		THEN event_val 
+		WHEN event_val IS NULL 							THEN NULL
+		ELSE 9999
+		END AS bmi_val,
+	'WLGP' AS source_db
+FROM 	
 	SAILWXXXXV.BMI_COHORT cohort
 LEFT JOIN
-	(	
-	SELECT DISTINCT 
-		ALF_E, 
-		event_dt AS bmi_dt, 
-		'Obese' AS bmi_cat, 
-		'4' AS bmi_c,
-		CASE 
-			WHEN event_val > 30 					 		THEN event_val 
-			WHEN event_val IS NULL 							THEN NULL
-			END AS bmi_val,
-		'WLGP' AS source_db
-	FROM SAILWXXXXV.BMI_ALG_GP a
-	RIGHT JOIN 
-		SAILWXXXXV.BMI_lookup b
-	ON a.event_cd = b.bmi_code AND b.category = 'obese'
-	WHERE 
-		a.event_dt BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO
-	AND	alf_sts_cd IN ('1', '4', '39')
-	) a
+	SAILWXXXXV.BMI_alg_gp a
 ON cohort.alf_e = a.alf_e
+INNER JOIN 
+	SAILWXXXXV.BMI_lookup b
+ON a.event_cd = b.bmi_code AND b.category = 'obese'
+WHERE 
+	a.event_dt BETWEEN SAILWXXXXV.BMI_date_from AND SAILWXXXXV.BMI_date_to
+AND	alf_sts_cd IN ('1', '4', '39')
 ;
-
-
 
 --1e. Pulling ALL entries from WLGP that have BMI category allocated between the time-frame specified.
 CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_CAT');
@@ -419,11 +371,12 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_CAT');
 CREATE TABLE SAILWXXXXV.BMI_CAT
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		bmi_dt     		DATE,
 		bmi_cat			VARCHAR(13),
 		bmi_c			CHAR(1),
-		bmi_val			DECIMAL(10),
+		bmi_val			DECIMAL(5),
 		source_db		VARCHAR(12)
 )
 DISTRIBUTE BY HASH(ALF_E);
@@ -435,23 +388,23 @@ COMMIT;
 ALTER TABLE SAILWXXXXV.BMI_CAT activate not logged INITIALLY;
 
 INSERT INTO SAILWXXXXV.BMI_CAT
-SELECT DISTINCT -- now we join all these tables together, removing duplicates.
+SELECT DISTINCT -- now we join all these tables together
 	*
 FROM 
-	SAILWXXXXV.UNDERWEIGHT
+	SAILWXXXXV.BMI_UNDERWEIGHT
 UNION ALL
 SELECT DISTINCT
 	*
 FROM 
-	SAILWXXXXV.NORMALWEIGHT
+	SAILWXXXXV.BMI_NORMALWEIGHT
 UNION ALL
 SELECT DISTINCT
 	*
-FROM SAILWXXXXV.OVERWEIGHT
+FROM SAILWXXXXV.BMI_OVERWEIGHT
 UNION ALL
 SELECT DISTINCT
 	*
-FROM SAILWXXXXV.OBESE
+FROM SAILWXXXXV.BMI_OBESE;
 
 COMMIT;
 
@@ -459,14 +412,18 @@ COMMIT;
 ---2. Extracting BMI VALUES
 -----------------------------------------------------------------------------------------------------------------
 -- Here we extract ALL entries with BMI values from the time-frame specified.
+
 CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_VAL');
 
 CREATE TABLE SAILWXXXXV.BMI_VAL
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		bmi_dt     		DATE,
-		bmi_val			DECIMAL(31,8),
+		bmi_val			DECIMAL(5),
+		bmi_cat			CHAR(20),
+		bmi_c			CHAR(1),
 		source_db		VARCHAR(12)
 )
 DISTRIBUTE BY HASH(ALF_E);
@@ -477,47 +434,50 @@ COMMIT;
 
 
 INSERT INTO SAILWXXXXV.BMI_VAL
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
+SELECT DISTINCT 
+    ALF_E, 
+    sex,
 	wob,
 	bmi_dt,
 	bmi_val,
-	source_db
-FROM
-	SAILWXXXXV.BMI_COHORT cohort
-LEFT JOIN
-	(	
-	-- join those with BMI values
+CASE  
+	WHEN bmi_val < 18.5 					THEN 'Underweight'
+	WHEN bmi_val >=18.5   AND bmi_val < 25 	THEN 'Normal weight'
+	WHEN bmi_val >= 25.0  AND bmi_val < 30 	THEN 'Overweight'
+	WHEN bmi_val >= 30.0 					THEN 'Obese'
+	ELSE NULL 
+	END AS bmi_cat, -- all the appropriate values will be assigned these categories. 
+CASE  
+	WHEN bmi_val < 18.5 					THEN '1'
+	WHEN bmi_val >=18.5   AND bmi_val < 25 	THEN '2'
+	WHEN bmi_val >= 25.0  AND bmi_val < 30 	THEN '3'
+	WHEN bmi_val >= 30.0 					THEN '4'
+	ELSE NULL 
+	END AS bmi_c, -- all the appropriate values will be assigned these numerical categories. 
+	'WLGP' AS source_db
+FROM 
+	(
 	SELECT DISTINCT 
-	    ALF_E, 
-		bmi_dt,
-		bmi_val,
-		'WLGP' AS source_db
+       cohort.*,
+		event_dt    AS bmi_dt, 
+		event_val   AS bmi_val
 	FROM 
-		(
-		SELECT DISTINCT 
-	        ALF_E, 
-			event_dt    AS bmi_dt, 
-			event_val   AS bmi_val
-		FROM 
-			SAILWXXXXV.BMI_ALG_GP a -- all of the WLGP data which has event_cd
-		RIGHT JOIN 
-			SAILWXXXXV.BMI_LOOKUP b -- that matches up the bmi_code in this table
-		ON a.event_cd = b.bmi_code
-		WHERE 
-			category = 'bmi' -- all entries relating to 'bmi' which have:
-		AND alf_sts_cd 	IN ('1', '4', '39') -- all the acceptable sts_cd
-		AND event_val IS NOT NULL
-		--AND event_val 	BETWEEN 12 AND 100 -- all the acceptable bmi values
-		AND event_dt	BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO -- we want to capture the study date.
-		)
-	) a
-ON cohort.alf_e = a.alf_e
-ORDER BY bmi_val
+		SAILWXXXXV.BMI_COHORT cohort
+	LEFT JOIN
+		SAILWXXXXV.BMI_alg_gp a
+	ON cohort.alf_e = a.alf_e -- all of the WLGP data which has event_cd
+	INNER JOIN 
+		SAILWXXXXV.BMI_LOOKUP b -- that matches up the bmi_code in this table
+	ON a.event_cd = b.bmi_code
+	WHERE 
+		category = 'bmi' -- all entries relating to 'bmi' which have:
+	AND alf_sts_cd 	IN ('1', '4', '39') -- all the acceptable sts_cd
+	AND event_val 	BETWEEN 12 AND 100 -- all the acceptable bmi values
+	AND event_dt	BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO -- we want to capture the study date.
+	)
 ; 
 
-COMMIT; 
+COMMIT;
 
 -----------------------------------------------------------------------------------------------------------------
 --3. extracting height and weight values from WLGP, MIDS, and NCCH databases.
@@ -532,6 +492,7 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_HEIGHT_WLGP');
 CREATE TABLE SAILWXXXXV.BMI_HEIGHT_WLGP
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		height_dt      	DATE,
 		height     		DECIMAL(31,8),
@@ -545,34 +506,33 @@ COMMIT;
 ALTER TABLE SAILWXXXXV.BMI_HEIGHT_WLGP activate not logged INITIALLY;
 
 INSERT INTO SAILWXXXXV.BMI_HEIGHT_WLGP
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
-	wob,
-	height_dt,
-	height,
-	source_db
-FROM
-	SAILWXXXXV.BMI_COHORT cohort
-LEFT JOIN
-	(	
-	SELECT DISTINCT 
-		ALF_E,  
-		event_dt AS height_dt, 
-		event_val AS height,
-		'WLGP' AS source_db
+	SELECT 
+		ALF_E, 
+		sex,
+		wob,
+		height_dt,
+		height, 
+		source_db
 	FROM 
-		SAILWXXXXV.BMI_ALG_GP a
-	RIGHT JOIN
-		SAILWXXXXV.BMI_LOOKUP b
-	ON a.event_cd = b.bmi_code AND b.category = 'height'
-	WHERE 
-		(event_dt BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO)
+		( 
+		SELECT DISTINCT 
+			cohort.*, 
+			event_dt AS height_dt, 
+			event_val AS height,
+			'WLGP' AS source_db
+		FROM 
+			SAILWXXXXV.BMI_COHORT cohort
+		LEFT JOIN
+			SAILWXXXXV.BMI_alg_gp a
+		ON cohort.alf_e = a.alf_e
+		INNER JOIN
+			SAILWXXXXV.BMI_LOOKUP b
+		ON a.event_cd = b.bmi_code AND b.category = 'height'
+		WHERE 
+			(event_dt BETWEEN SAILWXXXXV.BMI_date_from AND SAILWXXXXV.BMI_date_to)
 		AND alf_sts_cd IN ('1', '4', '39')
-		AND event_val IS NOT NULL -- we want valid height 
-	) a
-ON cohort.alf_e = a.alf_e
-;
+		AND event_val IS NOT NULL
+		);
 
 --3.1.b. Extracting weight from WLGP.	
 CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_WEIGHT_WLGP');
@@ -580,6 +540,7 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_WEIGHT_WLGP');
 CREATE TABLE SAILWXXXXV.BMI_WEIGHT_WLGP
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		weight_dt      	DATE,
 		weight     		INTEGER,
@@ -593,33 +554,23 @@ COMMIT;
 ALTER TABLE SAILWXXXXV.BMI_WEIGHT_WLGP activate not logged INITIALLY;
 
 INSERT INTO SAILWXXXXV.BMI_WEIGHT_WLGP
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
-	wob,
-	weight_dt,
-	weight,
-	source_db
-FROM
+SELECT DISTINCT 
+	cohort.*,  
+	event_dt	AS weight_dt,
+	event_val 	AS weight,
+	'WLGP' 		AS source_db
+FROM 
 	SAILWXXXXV.BMI_COHORT cohort
 LEFT JOIN
-	(	
-	SELECT DISTINCT 
-		ALF_E,   
-		event_dt	AS weight_dt,
-		event_val 	AS weight,
-		'WLGP' 		AS source_db
-	FROM 
-		SAILWXXXXV.BMI_ALG_GP a
-	RIGHT JOIN
-		SAILWXXXXV.BMI_LOOKUP b
-	ON a.event_cd = b.bmi_code AND b.category = 'weight'
-	WHERE 
-		(event_dt BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO)
-		AND alf_sts_cd IN ('1', '4', '39')
-		AND event_val IS NOT NULL -- we want valid weight.
-	) a
+	SAILWXXXXV.BMI_alg_gp a
 ON cohort.alf_e = a.alf_e
+INNER JOIN
+	SAILWXXXXV.BMI_LOOKUP b
+ON a.event_cd = b.bmi_code AND b.category = 'weight'
+WHERE 
+	(event_dt BETWEEN SAILWXXXXV.BMI_date_from AND SAILWXXXXV.BMI_date_to)
+AND alf_sts_cd IN ('1', '4', '39')
+AND event_val IS NOT NULL
 ;
 
 COMMIT; 
@@ -631,6 +582,7 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_HEIGHT_MIDS');
 CREATE TABLE SAILWXXXXV.BMI_HEIGHT_MIDS
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		height_dt      	DATE,
 		height     		DECIMAL(5,2),
@@ -644,30 +596,20 @@ COMMIT;
 ALTER TABLE SAILWXXXXV.BMI_HEIGHT_MIDS activate not logged INITIALLY;
 
 INSERT INTO SAILWXXXXV.BMI_HEIGHT_MIDS
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
-	wob,
-	height_dt,
-	height,
-	source_db
+SELECT DISTINCT 
+	cohort.*,
+	initial_ass_dt 		AS height_dt, 
+	service_user_height AS height,
+	'MIDS'				AS source_db
 FROM
 	SAILWXXXXV.BMI_COHORT cohort
 LEFT JOIN
-	(	
-	SELECT DISTINCT 
-		mother_ALF_E		AS ALF_E,
-		initial_ass_dt 		AS height_dt, 
-		service_user_height AS height,
-		'MIDS'				AS source_db
-	FROM
-		SAILWXXXXV.BMI_ALG_MIDS
-	WHERE 
-		(INITIAL_ASS_DT BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO)
-		AND mother_alf_sts_cd IN ('1', '4', '39')
-		AND service_user_height IS NOT NULL
-	) a
-ON cohort.alf_e = a.alf_e
+	SAILWXXXXV.BMI_ALG_MIDS a
+ON cohort.alf_e = a.mother_alf_e
+WHERE 
+	(INITIAL_ASS_DT BETWEEN SAILWXXXXV.BMI_date_from AND SAILWXXXXV.BMI_date_to)
+AND mother_alf_sts_cd IN ('1', '4', '39')
+AND service_user_height IS NOT NULL;
  
 
 --3.2.b. weight from MIDS
@@ -676,6 +618,7 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_WEIGHT_MIDS');
 CREATE TABLE SAILWXXXXV.BMI_WEIGHT_MIDS
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		weight_dt      	DATE,
 		weight     		INTEGER,
@@ -689,167 +632,23 @@ COMMIT;
 ALTER TABLE SAILWXXXXV.BMI_WEIGHT_MIDS activate not logged INITIALLY;
 
 INSERT INTO SAILWXXXXV.BMI_WEIGHT_MIDS
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
-	wob,
-	weight_dt,
-	weight,
-	source_db
+SELECT DISTINCT 
+	cohort.*,
+	initial_ass_dt 			AS weight_dt, 
+	service_user_weight_kg 	AS weight,
+	'MIDS'					AS source_db
 FROM
 	SAILWXXXXV.BMI_COHORT cohort
 LEFT JOIN
-	(	
-	SELECT DISTINCT 
-		mother_ALF_E			AS ALF_E,
-		initial_ass_dt 			AS weight_dt, 
-		service_user_weight_kg 	AS weight,
-		'MIDS'					AS source_db
-	FROM
-		SAILWXXXXV.BMI_ALG_MIDS 
-	WHERE 
-		(INITIAL_ASS_DT BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO)
-		AND mother_alf_sts_cd IN ('1', '4', '39')
-		AND service_user_weight_kg IS NOT NULL
-	) a
-ON cohort.alf_e = a.alf_e;
+	SAILWXXXXV.BMI_ALG_MIDS a
+ON cohort.alf_e = a.mother_alf_e
+WHERE 
+	(INITIAL_ASS_DT BETWEEN SAILWXXXXV.BMI_date_from AND SAILWXXXXV.BMI_date_to)
+AND mother_alf_sts_cd IN ('1', '4', '39')
+AND service_user_weight_kg IS NOT NULL;
 
 COMMIT;
 
-
---3.3.a. Extracting height from NCCH tables
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_HEIGHT_NCCH');
-
-CREATE TABLE SAILWXXXXV.BMI_HEIGHT_NCCH
-(
-		ALF_E        	BIGINT,
-		WOB				DATE,
-		height_dt      	DATE,
-		height     		DECIMAL(5,2),
-		source_db		CHAR(4)
-)
-DISTRIBUTE BY HASH(ALF_E);
-
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_HEIGHT_NCCH with distribution and detailed indexes all');
-COMMIT; 
-
-ALTER TABLE SAILWXXXXV.BMI_HEIGHT_NCCH activate not logged INITIALLY;
-
-INSERT INTO SAILWXXXXV.BMI_HEIGHT_NCCH
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
-	wob,
-	height_dt,
-	height,
-	source_db
-FROM
-	SAILWXXXXV.BMI_COHORT cohort
-LEFT JOIN
-	(	
-	SELECT DISTINCT 
-		a.ALF_E,
-		exam_dt 	AS height_dt,
-		height,  -- height is measured in cm, the calculations applied in other height tables do not work for these heights
-		'NCCH'	AS source_db
-	FROM
-		(
-		SELECT
-			child_id_e, -- this is the linkage field between NCCH tables.
-			exam_dt,
-			height
-		FROM
-			SAILWXXXXV.BMI_ALG_NCCH_CHILD_MEASURE
-		WHERE 
-			(exam_dt BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO)
-		AND height IS NOT NULL
-		UNION
-		SELECT
-			child_id_e,
-			exam_dt,
-			height_cm AS height
-		FROM
-			SAILWXXXXV.BMI_ALG_NCCH_EXAM  
-		WHERE 
-			(exam_dt BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO)
-		AND height_cm IS NOT NULL
-		)
-	LEFT JOIN
-		SAILWXXXXV.BMI_ALG_NCCH_CHILD_BIRTH aa -- no height here, we're using this to get the ALF_E link.
-	USING (child_id_e)
-	WHERE 
-		alf_sts_cd IN ('1', '4', '39')
-	AND height IS NOT NULL
-	) a
-ON cohort.alf_e = a.alf_e
-;
- 
-
---3.3.b. Extracting weight from NCCH tables
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_WEIGHT_NCCH');
-
-CREATE TABLE SAILWXXXXV.BMI_WEIGHT_NCCH
-(
-		ALF_E        	BIGINT,
-		WOB				DATE,
-		weight_dt      	DATE,
-		weight     		DECIMAL(5,2),
-		source_db		CHAR(4)
-)
-DISTRIBUTE BY HASH(ALF_E);
-
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_WEIGHT_NCCH with distribution and detailed indexes all');
-COMMIT; 
-
-ALTER TABLE SAILWXXXXV.BMI_WEIGHT_NCCH activate not logged INITIALLY;
-
-INSERT INTO SAILWXXXXV.BMI_WEIGHT_NCCH
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
-	wob,
-	weight_dt,
-	weight,
-	source_db
-FROM
-	SAILWXXXXV.BMI_COHORT cohort
-LEFT JOIN
-	(	
-	SELECT DISTINCT 
-		a.ALF_E,
-		exam_dt 	AS weight_dt,
-		weight, 
-		'NCCH'		AS source_db
-	FROM
-		(
-		SELECT
-			child_id_e, -- this is the linkage field between NCCH tables.
-			exam_dt,
-			weight
-		FROM
-			SAILWXXXXV.BMI_ALG_NCCH_CHILD_MEASURE 
-		WHERE 
-			(exam_dt BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO)
-		AND weight IS NOT NULL
-		UNION
-		SELECT
-			child_id_e,
-			exam_dt,
-			weight_kg AS weight
-		FROM
-			SAILWXXXXV.BMI_ALG_NCCH_EXAM 
-		WHERE 
-			(exam_dt BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO)
-		AND weight_kg IS NOT NULL
-		) b
-	LEFT JOIN
-		SAILWXXXXV.BMI_ALG_NCCH_CHILD_BIRTH aa  -- no weight here, we're using this to get the ALF_E link.
-	USING (child_id_e)
-	WHERE 
-		alf_sts_cd IN ('1', '4', '39')
-	AND weight IS NOT NULL
-	) a
-ON cohort.alf_e = a.alf_e;
 
 
 --3.4.a. Union all  height tables
@@ -858,6 +657,7 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_HEIGHT');
 CREATE TABLE SAILWXXXXV.BMI_HEIGHT
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		height_dt      	DATE,
 		height     		DECIMAL(31,8),
@@ -872,19 +672,12 @@ INSERT INTO SAILWXXXXV.BMI_HEIGHT -- creating a long table with all the height v
 SELECT DISTINCT
 	*
 FROM 
-	SAILWXXXXV.BMI_HEIGHT_WLGP;
-
-INSERT INTO SAILWXXXXV.BMI_HEIGHT
+	SAILWXXXXV.BMI_HEIGHT_WLGP
+UNION
 SELECT DISTINCT
 	*
 FROM
-	SAILWXXXXV.BMI_HEIGHT_MIDS;
-	
-INSERT INTO SAILWXXXXV.BMI_HEIGHT
-SELECT DISTINCT
-	*
-FROM
-	SAILWXXXXV.BMI_HEIGHT_NCCH;
+	SAILWXXXXV.BMI_HEIGHT_MIDS
 
 COMMIT;
 
@@ -894,6 +687,7 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_WEIGHT');
 CREATE TABLE SAILWXXXXV.BMI_WEIGHT
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		weight_dt      	DATE,
 		weight     		INTEGER,
@@ -910,22 +704,100 @@ INSERT INTO SAILWXXXXV.BMI_WEIGHT --creating a long table with all the weight va
 SELECT DISTINCT
 	*
 FROM 
-	SAILWXXXXV.BMI_WEIGHT_WLGP;
-
-INSERT INTO SAILWXXXXV.BMI_WEIGHT
+	SAILWXXXXV.BMI_WEIGHT_WLGP
+UNION
 SELECT DISTINCT
 	*
 FROM
-	SAILWXXXXV.BMI_WEIGHT_MIDS;
-
-INSERT INTO SAILWXXXXV.BMI_WEIGHT
-SELECT DISTINCT
-	*
-FROM
-	SAILWXXXXV.BMI_WEIGHT_NCCH;
+	SAILWXXXXV.BMI_WEIGHT_MIDS
+;
 
 COMMIT;
 
+--3.5. Joining height and weight tables together.
+CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_HEIGHTWEIGHT');
+
+CREATE TABLE SAILWXXXXV.BMI_HEIGHTWEIGHT
+(
+		ALF_E        		BIGINT,
+		sex				CHAR(1),
+		WOB				DATE,
+		bmi_dt     			DATE,
+		height				DECIMAL(31,8),
+		weight				INTEGER,
+		source_db			CHAR(4)
+)
+DISTRIBUTE BY HASH(ALF_E);
+
+CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_HEIGHTWEIGHT with distribution and detailed indexes all');
+COMMIT; 
+
+INSERT INTO SAILWXXXXV.BMI_HEIGHTWEIGHT
+-- Stage 1: union height and weight tables
+WITH table1 AS 
+(
+SELECT DISTINCT 
+	ALF_E, 
+	sex,
+	wob,
+	height_dt AS record_dt, 
+	height AS record_val, 
+	'height' record_tag,
+	source_db
+FROM 
+	SAILWXXXXV.BMI_HEIGHT
+UNION 
+SELECT DISTINCT 
+	ALF_E, 
+	sex,
+	wob,
+	weight_dt AS record_dt, 
+	weight AS record_val, 
+	'weight' record_tag,
+	source_db
+FROM 
+	SAILWXXXXV.BMI_WEIGHT
+),
+-- Stage 2: self-join to get the height and weight in one row.
+t2 AS
+(
+SELECT DISTINCT
+	t1.ALF_E,
+	t1.sex,
+	t1.wob,
+	t2.bmi_dt,
+	height,
+	weight,
+	t2.source_db
+FROM 
+	(
+	SELECT
+		ALF_E,
+		sex,
+		wob,
+		record_dt  AS bmi_dt,
+		record_val AS height,
+		source_db
+	FROM 
+		table1
+	WHERE record_tag = 'height'
+	) t1
+JOIN
+	(
+	SELECT
+		ALF_E,
+		record_dt AS bmi_dt,
+		record_val AS weight,
+		source_db
+	FROM table1
+	WHERE record_tag = 'weight'
+	) t2
+USING (ALF_E)
+)
+SELECT	
+	*
+FROM t2
+;
 -----------------------------------------------------------------------------------------------------------------
 ---4. extracting ALF_Es WITH code FROM PEDW
 -----------------------------------------------------------------------------------------------------------------
@@ -934,6 +806,7 @@ CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_PEDW');
 CREATE TABLE SAILWXXXXV.BMI_PEDW
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
 		WOB				DATE,
 		bmi_dt     		DATE,
 		bmi_cat			VARCHAR(13),
@@ -945,52 +818,52 @@ DISTRIBUTE BY HASH(ALF_E);
 CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_PEDW with distribution and detailed indexes all');
 COMMIT; 
 
-INSERT INTO SAILWXXXXV.BMI_PEDW 
--- Your ALFs are here:
-SELECT
-	cohort.alf_e,
-	wob,
-	bmi_dt,
-	bmi_cat,
-	bmi_c,
-	source_db
-FROM
+INSERT INTO SAILWXXXXV.BMI_PEDW
+SELECT DISTINCT 
+	cohort.*,
+	ADMIS_DT 	AS bmi_dt, 
+	'Obese' 	AS bmi_cat,
+	'4' 		AS bmi_c,
+	'PEDW' 		AS source_db
+FROM 
 	SAILWXXXXV.BMI_COHORT cohort
 LEFT JOIN
-	(	
-	SELECT distinct ALF_E, 
-		ADMIS_DT 	AS bmi_dt, 
-		'Obese' 	AS bmi_cat,
-		'4' 		AS bmi_c,
-		'PEDW' 		AS source_db
-	FROM 
-		SAILWXXXXV.BMI_ALG_PEDW_SPELL a 
-	INNER JOIN 
-		SAILWXXXXV.BMI_ALG_PEDW_DIAG b 
-	USING 
-		(SPELL_NUM_E)
-	WHERE 
-		(ADMIS_DT  BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO)
-		AND DIAG_CD LIKE 'E66%' -- ICD-10 codes that match this have obesity diagnoses.
-		AND alf_sts_cd IN ('1', '4', '39') 
-	) a
-ON cohort.alf_e = a.alf_e;
+	SAILWXXXXV.BMI_ALG_PEDW_SPELL a 
+ON cohort.alf_e = a.alf_e
+INNER JOIN 
+	SAILWXXXXV.BMI_ALG_PEDW_DIAG b 
+USING 
+	(SPELL_NUM_E)
+WHERE 
+	(ADMIS_DT  BETWEEN SAILWXXXXV.BMI_DATE_FROM AND SAILWXXXXV.BMI_DATE_TO)
+AND DIAG_CD LIKE 'E66%' -- ICD-10 codes that match this have obesity diagnoses.
+AND alf_sts_cd IN ('1', '4', '39') 
+;
 
 COMMIT;
 
---------------------------------------------------------------
------------- Putting all BMI data in one table.
---------------------------------------------------------------
--- Here we put all the BMI data in one table. We allocate a hierarchical rank based on source type.
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_COMBO_STAGE_1');
+-----------------------------------------------------------------------------------------------------------------
+--5.1. combining ALL four tables INTO one.
+-----------------------------------------------------------------------------------------------------------------
+-- This table generates ALL valid BMI readings (in form of category, value, height and weight calculations, and ICD-10 codes) from WLGP, MIDS, and PEDW tables for the time period specified by the researcher.
+-- ranking of multiple entries from different databases are done on this table:
+	--1. bmi value
+	--2. height and weight values from WLGP
+	--3. height adn weight values from MIDS
+	--4. bmi category
+	--5. ICD-10 codes
 
-CREATE TABLE SAILWXXXXV.BMI_COMBO_STAGE_1
+CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_COMBO_Stage1');
+
+CREATE TABLE SAILWXXXXV.BMI_COMBO_Stage1 -- we put all the entries from extracted tables together.
 (
 		ALF_E        	BIGINT,
+		sex				CHAR(1),
+		WOB				DATE,
 		bmi_dt     		DATE,
 		bmi_cat			VARCHAR(13),
 		bmi_c			CHAR(1),
-		bmi_val			DECIMAL(31,8),
+		bmi_val			DECIMAL(5),
 		height			DECIMAL(31,8),
 		weight			INTEGER,
 		source_type		VARCHAR(50),
@@ -999,287 +872,133 @@ CREATE TABLE SAILWXXXXV.BMI_COMBO_STAGE_1
 )
 DISTRIBUTE BY HASH(ALF_E);
 
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_COMBO_STAGE_1 with distribution and detailed indexes all');
+CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_COMBO_Stage1 with distribution and detailed indexes all');
 COMMIT; 
 
-ALTER TABLE SAILWXXXXV.BMI_COMBO_STAGE_1 activate not logged INITIALLY;
+ALTER TABLE SAILWXXXXV.BMI_COMBO_Stage1 activate not logged INITIALLY;
 
-INSERT INTO SAILWXXXXV.BMI_COMBO_STAGE_1 
--- this puts together all of the BMI components into one long table.
-SELECT  DISTINCT
-	*
+INSERT INTO SAILWXXXXV.BMI_COMBO_Stage1
+SELECT DISTINCT 
+	* 
 FROM 
 	(
-	SELECT 
-		ALF_E, 
-		bmi_dt, 
-		bmi_cat, 
-		bmi_c,
-		bmi_val, 
-		NULL 			AS height, 
-		NULL 			AS weight, 
-		'bmi category' 	AS source_type, 
-		'5' 			AS source_rank,
-		source_db
-	FROM 
-		SAILWXXXXV.BMI_CAT 
-	UNION ALL
-	SELECT 
-		ALF_E, 
-		bmi_dt, 
-		NULL 			AS bmi_cat, 
-		NULL 			AS 	bmi_c,
-		bmi_val, 
-		NULL 			AS height, 
-		NULL 			AS weight, 
-		'bmi value' 	AS source_type, 
-		'1' 			AS source_rank,
-		source_db 
-	FROM 
-		SAILWXXXXV.BMI_VAL
-	UNION ALL
-	SELECT 
-		ALF_E, 
-		height_dt 	AS bmi_dt, 
-		NULL		AS bmi_cat,
-		NULL		AS bmi_c,
-		NULL		AS bmi_val, 
-		height, 
-		NULL 		AS weight, 
-		'height' 	AS source_type, 
-		'2' 		AS source_rank,
-		source_db
-	FROM SAILWXXXXV.BMI_HEIGHT
-	WHERE 
-		source_db = 'WLGP'
-	UNION ALL
-	SELECT 
-		ALF_E, 
-		height_dt 	AS bmi_dt, 
-		NULL		AS bmi_cat,
-		NULL		AS bmi_c,
-		NULL		AS bmi_val, 
-		height, 
-		NULL 		AS weight, 
-		'height' 	AS source_type, 
-		'3' 		AS source_rank,
-		source_db
-	FROM SAILWXXXXV.BMI_HEIGHT
-	WHERE 
-		source_db = 'MIDS'
-	UNION ALL
-	SELECT 
-		ALF_E, 
-		height_dt 	AS bmi_dt, 
-		NULL		AS bmi_cat,
-		NULL		AS bmi_c,
-		NULL		AS bmi_val, 
-		height, 
-		NULL 		AS weight, 
-		'height' 	AS source_type, 
-		'4' 		AS source_rank,
-		source_db
-	FROM SAILWXXXXV.BMI_HEIGHT
-	WHERE 
-		source_db = 'NCCH'
-	UNION ALL
 		SELECT 
-		ALF_E, 
-		weight_dt 	AS bmi_dt, 
-		NULL		AS bmi_cat,
-		NULL		AS bmi_c,
-		NULL		AS bmi_val, 
-		NULL 		AS height, 
-		weight, 
-		'weight' 	AS source_type, 
-		'2' 		AS source_rank,
-		source_db
-	FROM SAILWXXXXV.BMI_WEIGHT
-	WHERE 
-		source_db = 'WLGP'
-	UNION ALL
-	SELECT 
-		ALF_E, 
-		weight_dt 	AS bmi_dt, 
-		NULL		AS bmi_cat,
-		NULL		AS bmi_c,
-		NULL		AS bmi_val, 
-		NULL 		AS height, 
-		weight, 
-		'weight' 	AS source_type, 
-		'3' 		AS source_rank,
-		source_db
-	FROM SAILWXXXXV.BMI_WEIGHT
-	WHERE 
-		source_db = 'MIDS'
-	UNION ALL
-	SELECT 
-		ALF_E, 
-		weight_dt 	AS bmi_dt, 
-		NULL		AS bmi_cat,
-		NULL		AS bmi_c,
-		NULL		AS bmi_val, 
-		NULL 		AS height, 
-		weight, 
-		'weight' 	AS source_type, 
-		'4' 		AS source_rank,
-		source_db
-	FROM SAILWXXXXV.BMI_WEIGHT
-	WHERE 
-		source_db = 'NCCH'
-	UNION ALL 
-	SELECT 
-		ALF_E, 
-		bmi_dt,
-		bmi_cat,
-		bmi_c,
-		NULL				AS bmi_val, 
-		NULL 				AS height, 
-		NULL 				AS weight, 
-		'ICD-10' 			AS source_type, 
-		'6' 				AS source_rank,
-		source_db			
-	FROM 
-		SAILWXXXXV.BMI_PEDW
-)
+			ALF_E,
+			sex,
+			wob,
+			bmi_dt, 
+			bmi_cat, 
+			bmi_c,
+			bmi_val, 
+			NULL 			AS height, 
+			NULL 			AS weight, 
+			'bmi category' 	AS source_type, 
+			'5' 			AS source_rank,
+			source_db
+		FROM 
+			SAILWXXXXV.BMI_CAT 
+		UNION ALL
+		SELECT 
+			ALF_E, 
+			sex,
+			wob,
+			bmi_dt, 
+			bmi_cat, 
+			bmi_c,
+			bmi_val, 
+			NULL 			AS height, 
+			NULL 			AS weight, 
+			'bmi value' 	AS source_type, 
+			'1' 			AS source_rank,
+			source_db 
+		FROM 
+			SAILWXXXXV.BMI_VAL
+		UNION ALL
+		SELECT 
+			ALF_E, 
+			sex,
+			wob,
+			bmi_dt, 
+			NULL		AS bmi_cat,
+			NULL		AS bmi_c,
+			NULL		AS bmi_val, 
+			height, 
+			weight, 
+			'weight' 	AS source_type, 
+			'2' 		AS source_rank,
+			source_db
+		FROM SAILWXXXXV.BMI_HEIGHTWEIGHT 
+		WHERE 
+			source_db = 'WLGP'
+		UNION ALL
+		SELECT 
+			ALF_E, 
+			sex,
+			wob,
+			bmi_dt, 
+			NULL		AS bmi_cat,
+			NULL		AS bmi_c,
+			NULL		AS bmi_val, 
+			height, 
+			weight, 
+			'weight' 	AS source_type, 
+			'3' 		AS source_rank,
+			source_db
+		FROM SAILWXXXXV.BMI_HEIGHTWEIGHT
+		WHERE 
+			source_db = 'MIDS'
+		UNION ALL
+		SELECT 
+			ALF_E, 
+			sex,
+			wob,
+			bmi_dt, 
+			NULL		AS bmi_cat,
+			NULL		AS bmi_c,
+			NULL		AS bmi_val, 
+			height, 
+			weight, 
+			'weight' 	AS source_type, 
+			'4' 		AS source_rank,
+			source_db
+		FROM SAILWXXXXV.BMI_HEIGHTWEIGHT 
+		WHERE 
+			source_db = 'NCCH'
+		UNION ALL
+		SELECT 
+			ALF_E, 
+			sex,
+			wob,
+			bmi_dt,
+			bmi_cat,
+			bmi_c,
+			NULL				AS bmi_val, 
+			NULL 				AS height, 
+			NULL 				AS weight, 
+			'ICD-10' 			AS source_type, 
+			'6' 				AS source_rank,
+			source_db			
+		FROM 
+			SAILWXXXXV.BMI_PEDW
+	)
 ;
 
+------------------------------------------
+-- Section 6. Calculating BMI values from height and weight and allocating BMI categories
+------------------------------------------
+--6.1 Calculating BMI values from height and weight and allocating BMI categories.
+--In this chunk, we are:
+--Stage1. Creating temporary tables for:
+	-- adult height
+		--1. only take height readings done when alfs are adults
+		--2. taking only the most recent height reading.
+	-- adult weight
+		--1. taking only weight readings done when alfs are adults from BMI_COMBO table.
+	-- calculating bmi_value using adult height and adult weight values
+--BMI_COMBO_ADULTS table at the end of this stage has allocated BMI categories and calculated BMI values from adult height and weight, and entries from other source types.
+CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_COMBO_Stage2');
 
----- Linking WDSD tables
--- we only want to select ALFs with valid WOB, valid gndr_cd, and those who were alive after the start date.
--- we also calculate how many days each ALF has contributed to the data so we created a follow_up_dod (when they died) and follow_up_res (when they moved out of Wales)
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_COMBO_STAGE_2');
-
-CREATE TABLE SAILWXXXXV.BMI_COMBO_STAGE_2
-(
-		ALF_E        	BIGINT,
-		sex				CHAR(1),
-		wob				DATE,
-		bmi_dt     		DATE,
-		bmi_cat			VARCHAR(13),
-		bmi_c			CHAR(1),
-		bmi_val			DECIMAL(31,8),
-		height			DECIMAL(31,8),
-		weight			INTEGER,
-		source_type		VARCHAR(50),
-		source_rank		SMALLINT,
-		source_db		CHAR(4),
-		active_from		DATE,
-		active_to		DATE,
-		dod				DATE,
-		follow_up_dod	INTEGER
-)
-DISTRIBUTE BY HASH(ALF_E);
-
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_COMBO_STAGE_2 with distribution and detailed indexes all');
-COMMIT; 
-
-ALTER TABLE SAILWXXXXV.BMI_COMBO_STAGE_2 activate not logged INITIALLY;
-
-INSERT INTO SAILWXXXXV.BMI_COMBO_STAGE_2 -- attaching dod, from_dt, to_dt to BMI_COMBO and creating the follow_up field.
-SELECT
-	*,
-	-- counting how many days they contributed to the data before death
-	-- this creates a flag which counts the difference between study start date and DOD.
-	-- we will remove those with > 31 days follow up in the next stage.
-	abs(DAYS_BETWEEN(dod, SAILWXXXXV.BMI_DATE_FROM)) AS follow_up_dod
-FROM
-	(
-	SELECT DISTINCT 
-		a.ALF_E,
-		b.sex,
-		b.wob,
-		bmi_dt, 
-		bmi_cat, 
-		bmi_c,
-		bmi_val, 
-		height, 
-		weight, 
-		source_type, 
-		source_rank,
-		source_db,
-		dod,
-		active_from,
-		active_to
-	FROM 
-		SAILWXXXXV.BMI_COMBO_STAGE_1 a
-	LEFT JOIN
-				(
-				SELECT
-					alf_e,
-					gndr_cd 	AS sex,
-					wob,
-					death_dt 	AS dod,
-					CASE 
-						WHEN activefrom IS NULL 							THEN SAILWXXXXV.BMI_DATE_FROM
-						WHEN activefrom < SAILWXXXXV.BMI_DATE_FROM THEN SAILWXXXXV.BMI_DATE_FROM
-						ELSE activefrom
-						END AS active_from,
-					CASE
-						WHEN activeto IS NULL THEN SAILWXXXXV.BMI_DATE_TO
-						ELSE activeto 	
-						END AS active_to
-				FROM
-					SAILWXXXXV.BMI_ALG_WDSD -- the single view wdsd table.
-				) b
-	ON a.ALF_E = b.ALF_E AND a.bmi_dt BETWEEN b.active_from AND b.active_to
-	WHERE 
-		b.wob IS NOT NULL -- we only want to keep ALFs that have WOB
-		AND (b.sex IN ('1', '2') AND b.sex IS NOT NULL) -- we want ALFs with valid gndr_cd
-		OR 	b.dod > SAILWXXXXV.BMI_DATE_FROM -- we want ALFs who were alive after the start date.
-		-- we want ALFs who were alive after the start date. NOTE if I use 'AND', this returns 0 entries. 'OR' function works.
-	);
-
-
-------- selecting only those with 31 days follow up
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_COMBO');
--- this creates the general combo table.
-
-CREATE TABLE SAILWXXXXV.BMI_COMBO
-(
-		ALF_E        	BIGINT,
-		sex				CHAR(1),
-		wob				DATE,
-		bmi_dt     		DATE,
-		bmi_cat			VARCHAR(13),
-		bmi_c			CHAR(1),
-		bmi_val			DECIMAL(31,8),
-		height			DECIMAL(31,8),
-		weight			INTEGER,
-		source_type		VARCHAR(50),
-		source_rank		SMALLINT,
-		source_db		CHAR(4),
-		dod				DATE,
-		active_from		DATE,
-		active_to		DATE,
-		follow_up_dod	INTEGER
-)
-DISTRIBUTE BY HASH(ALF_E);
-
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_COMBO with distribution and detailed indexes all');
-COMMIT; 
-
-ALTER TABLE SAILWXXXXV.BMI_COMBO activate not logged INITIALLY;
-
-INSERT INTO SAILWXXXXV.BMI_COMBO
-SELECT
-	*
-FROM 
-	SAILWXXXXV.BMI_COMBO_STAGE_2
-WHERE 
-	follow_up_dod > 31; -- we only want ALFs who were alive/in the study after 31 days of the study start date.
-
-COMMIT;
-
-SELECT * FROM SAILWXXXXV.BMI_COMBO;
-
--------------------------------------------------------------------------------
----- Stage 3. Calculating age and pairing height and weight for ADULT COHORT
--------------------------------------------------------------------------------
-
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_1');
-
-CREATE TABLE SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_1
+CREATE TABLE SAILWXXXXV.BMI_COMBO_Stage2
 (
 		alf_e        	BIGINT,
 		sex				CHAR(1),
@@ -1292,23 +1011,19 @@ CREATE TABLE SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_1
 		weight			INTEGER,
 		source_type		VARCHAR(50),
 		source_rank		SMALLINT,
-		source_db		CHAR(4),
-		dod				DATE,
-		active_from		DATE,
-		active_to		DATE,
-		follow_up_dod	INTEGER
+		source_db		CHAR(4)
 )
 DISTRIBUTE BY HASH(alf_e);
 
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_1 with distribution and detailed indexes all');
+CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_COMBO_Stage2 with distribution and detailed indexes all');
 COMMIT; 
 
-ALTER TABLE SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_1 activate not logged INITIALLY;
+ALTER TABLE SAILWXXXXV.BMI_COMBO_Stage2 activate not logged INITIALLY;
 
-INSERT INTO SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_1
+INSERT INTO SAILWXXXXV.BMI_COMBO_Stage2
 WITH height_table AS
 -- creating the height table
--- 1. standardising measurements and removing height outliers.
+-- 1.standardising measurements
 -- 2. taking only height that is recorded in adulthood
 -- 3. taking only the most recent height for adults.
 	(
@@ -1323,11 +1038,7 @@ WITH height_table AS
 		height_standard AS height, 
 		source_type, 
 		source_rank,
-		source_db,
-		dod,
-		active_from,
-		active_to,
-		follow_up_dod
+		source_db
 	FROM
 		(
 		SELECT
@@ -1338,18 +1049,15 @@ WITH height_table AS
 				WHEN height BETWEEN 48 		AND 84 		THEN (height*2.54)/100  -- converts inches to meters
 				ELSE NULL 
 				END AS height_standard,
-			ROW_NUMBER() OVER (PARTITION BY alf_e ORDER BY bmi_dt desc) AS event_order, -- to get the most recent height reading
+			ROW_NUMBER() OVER (PARTITION BY alf_e ORDER BY bmi_dt desc) AS event_order,
 			DAYS_BETWEEN (bmi_dt, wob)/365.25 AS age_height
 		FROM 
-			SAILWXXXXV.BMI_COMBO
+			SAILWXXXXV.BMI_COMBO_Stage1
 		WHERE
-			source_type = 'height' -- selecting entries that are only height values
-			AND height != 0 -- it will not calculate if 0 is used as denominator.
+			source_type = 'weight' -- selecting entries that only have height and weight / no bmi cat or bmi values.
+		AND height != 0 -- it will not calculate if 0 is used as denominator.
 		)
-	WHERE 
-		event_order = 1 -- select only the latest reading for adults
-		AND age_height BETWEEN 19 AND 100 -- only height readings done when they were adults are kept to be used to calculate BMI.
-		AND source_db != 'NCCH' -- we do not include data from NCCH for the adult cohort.
+	WHERE event_order = 1 -- select only the latest reading for adults
 	),
 weight_table AS-- weight TABLE
 -- extracting weight measurements from BMI_COMBO table.
@@ -1365,21 +1073,14 @@ weight_table AS-- weight TABLE
 		weight, 
 		source_type, 
 		source_rank,
-		source_db,
-		dod,
-		active_from,
-		active_to,
-		follow_up_dod
+		source_db
 	FROM 
-		SAILWXXXXV.BMI_COMBO
+		SAILWXXXXV.BMI_COMBO_Stage1
 	WHERE 
         source_type = 'weight'
-		AND source_db != 'NCCH' -- we do not include data from NCCH for the adult cohort.
-		AND DAYS_BETWEEN (bmi_dt, wob)/365.25 BETWEEN 19 AND 100 -- want to include ALFs who were aged 19 and 100 at the time of BMI reading.
 	),
 height_weight AS
 -- calculating BMI value from the latest height reading for each ALF and the weight entries.
--- only selecting BMI values between 12-100.
 	(
 	SELECT
 		alf_e,
@@ -1405,11 +1106,7 @@ height_weight AS
 		weight,
 		source_type,
 		source_rank,
-		source_db,
-		dod,
-		active_from,
-		active_to,
-		follow_up_dod
+		source_db
 	FROM 
 		(
 		SELECT 
@@ -1422,11 +1119,7 @@ height_weight AS
 			weight,
 			b.source_type,
 			b.source_rank,
-			b.source_db,
-			b.dod,
-			b.active_from,
-			b.active_to,
-			b.follow_up_dod
+			b.source_db
 		FROM
 			HEIGHT_TABLE a -- the latest height reading for each ALF. 
 		INNER JOIN
@@ -1441,16 +1134,16 @@ SELECT
     * 
 FROM 
     height_weight;
-    
- 
---- now adding the other SOURCE types and restricting the BMI values to 12-100
--- we also allocate the age band in this section.
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_2');
 
-CREATE TABLE SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_2
+-----------------------------------------------------------
+--6.2. Now we add the rest of the entries from other sources to create BMI_COMBO
+-----------------------------------------------------------
+CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_COMBO');
+
+CREATE TABLE SAILWXXXXV.BMI_COMBO
 (
 		alf_e        	BIGINT,
-		sex				CHAR(1),
+		sex			CHAR(1),
 		wob				DATE,
 		age_months		INTEGER,
 		age_years		INTEGER,
@@ -1463,49 +1156,31 @@ CREATE TABLE SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_2
 		weight			INTEGER,
 		source_type		VARCHAR(50),
 		source_rank		SMALLINT,
-		source_db		CHAR(4),
-		dod				DATE,
-		active_from		DATE,
-		active_to		DATE,
-		follow_up_dod	INTEGER
+		source_db		CHAR(4)
 )
 DISTRIBUTE BY HASH(alf_e);
 
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_2 with distribution and detailed indexes all');
+CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_COMBO with distribution and detailed indexes all');
 COMMIT; 
 
-ALTER TABLE SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_2 activate not logged INITIALLY;
+ALTER TABLE SAILWXXXXV.BMI_COMBO activate not logged INITIALLY;
 
-INSERT INTO SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_2
+INSERT INTO SAILWXXXXV.BMI_COMBO
 	SELECT
 		alf_e,
 		sex,
 		wob,
-		ROUND(DAYS_BETWEEN(BMI_DT, WOB)/30.44)			AS age_months,
-		ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25)			AS age_years,
+		ROUND(DAYS_BETWEEN(BMI_DT, WOB)/30.44)						AS age_months,
+		ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25)						AS age_years,
 		CASE 
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) BETWEEN 19 AND 29		THEN '19-29'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 19 					THEN '19-29'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 29					THEN '19-29'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) BETWEEN 30 AND 39		THEN '30-39'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 30 					THEN '30-39'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 39					THEN '30-39'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) BETWEEN 40 AND 49		THEN '40-49'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 40 					THEN '40-49'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 49					THEN '40-49'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) BETWEEN 50 AND 59		THEN '50-59'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 50 					THEN '50-59'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 59					THEN '50-59'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) BETWEEN 60 AND 69		THEN '60-69'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 60 					THEN '60-69'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 69					THEN '60-69'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) BETWEEN 70 AND 79		THEN '70-79'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 70 					THEN '70-79'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 79					THEN '70-79'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) BETWEEN 80 AND 89		THEN '80-89'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 80 					THEN '80-89'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) = 89					THEN '80-89'
-			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) >= 90					THEN '90 -100'
+			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) >= 19 AND ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) <= 29		THEN '19-29'
+			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) >= 30 AND ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) <= 39		THEN '30-39'
+			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) >= 40 AND ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) <= 49		THEN '40-49'
+			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) >= 50 AND ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) <= 59		THEN '50-59'
+			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) >= 60 AND ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) <= 69		THEN '60-69'
+			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) >= 70 AND ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) <= 79		THEN '70-79'
+			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) >= 80 AND ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) <= 89		THEN '80-89'
+			WHEN ROUND(DAYS_BETWEEN(BMI_DT, WOB)/365.25) >= 90					                                        THEN '90 and over'
 			ELSE NULL 
 		END AS age_band,
 		bmi_dt,
@@ -1516,20 +1191,14 @@ INSERT INTO SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_2
 		weight,
 		source_type,
 		source_rank,
-		source_db,
-		dod,
-		active_from,
-		active_to,
-		follow_up_dod
+		source_db
 	FROM 
 		(
-		-- table which calculated the BMI value and assigned BMI categories from the height and weight values.
 		SELECT
 			*
 		FROM 
-			SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_1
+			SAILWXXXXV.BMI_COMBO_Stage2-- table which calculated the BMI value and assigned BMI categories from the height and weight values.
 		UNION
-		-- adding all the other entries from BMI_COMBO that were from other sources.
 		SELECT 
 			alf_e,
 			sex,
@@ -1542,89 +1211,30 @@ INSERT INTO SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_2
 			weight, 
 			source_type, 
 			source_rank,
-			source_db,
-			dod,
-			active_from,
-			active_to,
-			follow_up_dod
+			source_db
 		FROM 
-			SAILWXXXXV.BMI_COMBO
-		WHERE source_type IN ('bmi category', 'bmi value', 'ICD-10') 
-		-- removing outliers for BMI values.
-		AND BMI_VAL BETWEEN 12 AND 100
+			SAILWXXXXV.BMI_COMBO_Stage1
+		WHERE source_type != 'weight' -- adding all the other entries from BMI_COMBO that were from other sources.
 		)
-	WHERE 
-	 	DAYS_BETWEEN (bmi_dt, wob)/365.25 BETWEEN 19 AND 100 -- getting readings when ALF are 19-100yo.
-		AND source_db != 'NCCH' -- we exclude all entries for NCCH in the adult cohort.
 ;
 
-
--- counting the contribution of adults
-SELECT
-	a.*,
-	max_date
-FROM
-	SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_2 a
-LEFT JOIN
-	(
-	SELECT
-		alf_e,
-		sex,
-		wob,
-		active_from,
-		active_to,
-		dod,
-		CASE 	
-					-- when they moved out of Wales before they died, choose the date they moved out.
-					WHEN max(active_to) < dod									THEN max(active_to)
-					-- when their residence date started before the study start date, then choose the study start date.
-					ELSE dod
-					END AS max_date
-	FROM
-		SAILWXXXXV.BMI_COMBO_ADULTS_STAGE_2
-	GROUP BY alf_e, sex, wob, dod, active_from, active_to
-	) b
-ON a.alf_e = b.alf_e AND a.active_from = b.active_from AND a.active_to = a.active_to;
-
-SELECT * FROM SAILWXXXXV.BMI_COMBO_ADULTS;
---------------------------------------------
---- Stage 4. Identifying inconsistencies
---------------------------------------------
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1');
-
-CREATE TABLE SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1
-(
-		alf_e        	BIGINT,
-		sex				CHAR(1),
-		wob				DATE,
-		age_months		INTEGER,
-		age_years		INTEGER,
-		age_band		VARCHAR(100),
-		bmi_dt     		DATE,
-		bmi_cat			VARCHAR(13),
-		bmi_c			CHAR(1),
-		bmi_val			DECIMAL(5),
-		height			DECIMAL(31,8),
-		weight			INTEGER,
-		source_type		VARCHAR(50),
-		source_rank		SMALLINT,
-		source_db		CHAR(4),
-		active_from		DATE,
-		active_to		DATE,
-		dod				DATE,
-		follow_up_dod	INTEGER,
-		follow_up_res	INTEGER,
-		bmi_flg			CHAR(1)
-)
-DISTRIBUTE BY HASH(alf_e);
-
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1 with distribution and detailed indexes all');
 COMMIT; 
 
-ALTER TABLE SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1 activate not logged INITIALLY;
+-----------------------------------------------------
+-- Section 7. Identifying and removing inconsistencies
+-----------------------------------------------------
+-- 7.1 Identifying same day inconsistencies:
+CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_UNCLEAN_SAMEDAY');
 
--- first step of cleaning - flags same-day inconsistencies
-INSERT INTO SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1
+-- this is the table with all the same-day entries with bmi_flg = NuLL, 5, or 6 are kept.
+-- bmi_flg = 5 means these are same-day entries with more than 5% difference in bmi_value BUT has same BMI_recorded, keep the first reading
+-- bmi_flg = 6 means these are same day reading, less than 5% BMI difference in BMI value, BUT has change of 1 BMI category.
+-- bmi_flg = NULL means they are within the 5% BMI value difference, and also the same BMI category.
+-- Researchers can choose to remove these flags if they wish and only keep entries that were not flagged.
+
+CREATE TABLE SAILWXXXXV.BMI_UNCLEAN_SAMEDAY AS (
+WITH T1 AS (
+-- this is where we identify and allocate BMI flags for each same-day entries:
 	SELECT 
 		a.alf_e,
 		sex,
@@ -1641,36 +1251,46 @@ INSERT INTO SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1
 		source_type,
 		source_rank,
 		source_db,
-		active_from,
-		active_to,
-		dod,
-		follow_up_dod,
-		follow_up_res,
+		dt_diff_before,
+		dt_diff_after,
+		cat_diff_before,
+		cat_diff_after,
+		val_diff_before,
+		val_diff_after,
 	CASE 	
 		WHEN BMI_VAL IS NULL THEN -- only BMI categories recorded
 			CASE 
-				WHEN (dt_diff_before = 0 	AND cat_diff_before > 1) OR  (dt_diff_after = 0 AND cat_diff_after > 1) 						THEN 1 -- same day readings,  different bmi categories
+				WHEN (dt_diff_before = 0 	AND cat_diff_before > 1) OR  (dt_diff_after = 0 AND cat_diff_after > 1) 						THEN 1 -- same day readings,  different bmi categories. we want to remove this.
 				ELSE NULL END 
 		WHEN BMI_VAL IS NOT NULL THEN -- BMI values were recorded.
 			CASE 	
-				-- same day readings with more than 5% difference in bmi_value BUT has same BMI_recorded, keep the first reading.
-				WHEN (dt_diff_after = 0 	AND (val_diff_after/bmi_val) > SAILWXXXXV.BMI_SAME_DAY AND cat_diff_after = 0) 		THEN 5 -- same day readings, more than 5% BMI value, but same category recording -- we want to keep this record.
 				-- same day readings with more than 5% difference in bmi_value AND has different categories recorded
-				WHEN (dt_diff_before = 0 	AND (val_diff_before/bmi_val) > SAILWXXXXV.BMI_SAME_DAY)
-					OR (dt_diff_after = 0 	AND (val_diff_after/bmi_val) > SAILWXXXXV.BMI_SAME_DAY)	
-					AND cat_diff_after != 0																								THEN 3 -- more than 5% weight difference on same day reading, and different category
+				WHEN (dt_diff_before = 0 	AND  dt_diff_after = 0) -- same day reading from the previous and next entry
+				AND ((val_diff_before/bmi_val) > SAILWXXXXV.BMI_SAME_DAY -- reading is 5% more than the previous entry
+					OR (val_diff_before/bmi_val) > SAILWXXXXV.BMI_SAME_DAY) -- reading is 5% more than the next entry
+				AND (cat_diff_before >= 1 OR cat_diff_after >= 0)	-- different BMI categories											
+																																			THEN 3 -- we want to remove this record
+				-- same day readings with more than 5% difference in bmi_value BUT has same BMI_recorded, keep the first reading.
+				WHEN (dt_diff_before = 0 	AND  dt_diff_after = 0) -- same reading from the previous entry. This means only the entry will be kept.
+					--OR (dt_diff_before = 0 AND dt_diff_after != 0 )) -- last entry for that day
+				AND ((val_diff_before/bmi_val) > SAILWXXXXV.BMI_SAME_DAY -- reading is 5% more than the previous entry
+					OR (val_diff_after/bmi_val) > SAILWXXXXV.BMI_SAME_DAY) -- reading is 5% more than the next entry				
+				AND (cat_diff_before = 0) -- same BMI category as previous entry.									
+																																			THEN 5 -- same category but has > 5% difference in BMI value. we want to keep this record.
 				-- same day reading, less than 5% BMI difference in BMI value, BUT has change of 1 BMI category. We want to keep, but flag them in case:
-				WHEN ((dt_diff_before = 0 	AND (val_diff_before/bmi_val) < SAILWXXXXV.BMI_SAME_DAY)
-					and (dt_diff_after = 0 	AND (val_diff_after/bmi_val) < SAILWXXXXV.BMI_SAME_DAY))
-					AND (cat_diff_before = 1 OR cat_diff_after = 1)																		THEN 6	
+				WHEN (dt_diff_before = 0 	AND  dt_diff_after = 0) -- same reading from the previous and next entry.
+				AND (val_diff_before/bmi_val) < SAILWXXXXV.BMI_SAME_DAY -- less than 5% BMI value from previous entry
+					--OR (val_diff_after/bmi_val) < SAILWXXXXV.BMI_SAME_DAY)
+				AND cat_diff_before >= 1	-- different BMI category																						
+																																			THEN 6	-- different category, has < 5% difference in BMI value. We want to keep this record.
 				ELSE NULL END
 		END AS bmi_flg				
 	FROM 
 		(
 		SELECT DISTINCT 
-			alf_e -- all the ALFs on our adult cohort.
+			alf_e -- all the ALFs on our adult cohort
 		FROM
-			SAILWXXXXV.BMI_COMBO_ADULTS
+			SAILWXXXXV.BMI_COMBO
 		) a
 	LEFT JOIN
 		( -- identifying the changes in BMI categories/BMI values for same-day / over time period.
@@ -1685,50 +1305,32 @@ INSERT INTO SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1
 			abs(DAYS_BETWEEN(bmi_dt,(lag(bmi_dt)	OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))) 	AS dt_diff_before, 		-- identifies number of days passed from previous reading
 			abs(DAYS_BETWEEN(bmi_dt,(lead(bmi_dt) 	OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))) 	AS dt_diff_after 		-- identifies number of days passed with next reading
 		FROM 
-			SAILWXXXXV.BMI_COMBO_ADULTS
+			SAILWXXXXV.BMI_COMBO
 		) b
 	USING (alf_e)
-;
-
-COMMIT;
-
-
--- Now we do the second stage of flagging, where we remove entries flagged as 1 or 3 in UNCLEAN_STAGE_1
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_UNCLEAN_ADULTS');
-
-CREATE TABLE SAILWXXXXV.BMI_UNCLEAN_ADULTS
-(
-		alf_e        	BIGINT,
-		sex				CHAR(1),
-		wob				DATE,
-		age_months		INTEGER,
-		age_years		INTEGER,
-		age_band		VARCHAR(100),
-		bmi_dt     		DATE,
-		bmi_cat			VARCHAR(13),
-		bmi_c			CHAR(1),
-		bmi_val			DECIMAL(5),
-		height			DECIMAL(31,8),
-		weight			INTEGER,
-		source_type		VARCHAR(50),
-		source_rank		SMALLINT,
-		source_db		CHAR(4),
-		active_from		DATE,
-		active_to		DATE,
-		dod				DATE,
-		follow_up_dod	INTEGER,
-		follow_up_res	INTEGER,
-		bmi_flg			CHAR(1)
+),
+t2 AS (
+-- We only select those with bmi_flg = NULL, 5, or 6 as they are the ones that meet the threshold for consistency.
+SELECT
+	*
+FROM
+	T1
+WHERE bmi_flg IS NULL OR bmi_flg = 5 OR bmi_flg = 6
 )
-DISTRIBUTE BY HASH(alf_e);
+-- order the entries by most important source rank and least bmi_flg
+-- this is saved as a table so researchers can have a look at the table later
+-- only entries with counts = 1 (lowest source rank and lowest bmi_flg value) will be kept when we clean for over-time inconsistencies.
+SELECT
+	*,
+	-- arrange entries by source_rank and bmi_flg
+	ROW_NUMBER () OVER (PARTITION BY alf_e, bmi_dt ORDER BY source_rank, bmi_flg) AS counts
+FROM
+	t2	
+) WITH NO DATA;
 
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_UNCLEAN_ADULTS with distribution and detailed indexes all');
-COMMIT; 
-
-ALTER TABLE SAILWXXXXV.BMI_UNCLEAN_ADULTS activate not logged INITIALLY;
-
--- second step of cleaning - flags different day inconsistencies
-INSERT INTO SAILWXXXXV.BMI_UNCLEAN_ADULTS
+INSERT INTO SAILWXXXXV.BMI_UNCLEAN_SAMEDAY
+WITH T1 AS (
+-- this is where we identify and allocate BMI flags for each same-day entries:
 	SELECT 
 		a.alf_e,
 		sex,
@@ -1745,31 +1347,46 @@ INSERT INTO SAILWXXXXV.BMI_UNCLEAN_ADULTS
 		source_type,
 		source_rank,
 		source_db,
-		active_from,
-		active_to,
-		dod,
-		follow_up_dod,
-		follow_up_res,
-	CASE 
-		WHEN bmi_flg IS NOT NULL	THEN bmi_flg
+		dt_diff_before,
+		dt_diff_after,
+		cat_diff_before,
+		cat_diff_after,
+		val_diff_before,
+		val_diff_after,
+	CASE 	
 		WHEN BMI_VAL IS NULL THEN -- only BMI categories recorded
-			CASE
-				WHEN (dt_diff_before != 0 		AND cat_diff_before/dt_diff_before > SAILWXXXXV.BMI_RATE 	AND cat_diff_before > 1) 
-						OR 	 (dt_diff_after != 0 	AND cat_diff_after/dt_diff_after > SAILWXXXXV.BMI_RATE  	AND cat_diff_after > 1) 	THEN 2 -- more than 0.3% rate of CHANGE
-			ELSE NULL END 
+			CASE 
+				WHEN (dt_diff_before = 0 	AND cat_diff_before > 1) OR  (dt_diff_after = 0 AND cat_diff_after > 1) 						THEN 1 -- same day readings,  different bmi categories. we want to remove this.
+				ELSE NULL END 
 		WHEN BMI_VAL IS NOT NULL THEN -- BMI values were recorded.
-			CASE
-			-- different day readings with more than .3% change of BMI value per day AND more than 1 category change.
-					WHEN (dt_diff_before != 0 	AND ((val_diff_before/bmi_val)/dt_diff_before) > SAILWXXXXV.BMI_RATE AND cat_diff_before > 1) 
-						OR (dt_diff_after != 0 	AND ((val_diff_after/bmi_val)/dt_diff_after) > SAILWXXXXV.BMI_RATE  AND cat_diff_after > 1) 	THEN 4  -- more than 0.03% rate of change over time.
-			ELSE NULL END
+			CASE 	
+				-- same day readings with more than 5% difference in bmi_value AND has different categories recorded
+				WHEN (dt_diff_before = 0 	AND  dt_diff_after = 0) -- same day reading from the previous and next entry
+				AND ((val_diff_before/bmi_val) > SAILWXXXXV.BMI_SAME_DAY -- reading is 5% more than the previous entry
+					OR (val_diff_before/bmi_val) > SAILWXXXXV.BMI_SAME_DAY) -- reading is 5% more than the next entry
+				AND (cat_diff_before >= 1 OR cat_diff_after >= 0)	-- different BMI categories											
+																																			THEN 3 -- we want to remove this record
+				-- same day readings with more than 5% difference in bmi_value BUT has same BMI_recorded, keep the first reading.
+				WHEN (dt_diff_before = 0 	AND  dt_diff_after = 0) -- same reading from the previous entry. This means only the entry will be kept.
+					--OR (dt_diff_before = 0 AND dt_diff_after != 0 )) -- last entry for that day
+				AND ((val_diff_before/bmi_val) > SAILWXXXXV.BMI_SAME_DAY -- reading is 5% more than the previous entry
+					OR (val_diff_after/bmi_val) > SAILWXXXXV.BMI_SAME_DAY) -- reading is 5% more than the next entry				
+				AND (cat_diff_before = 0) -- same BMI category as previous entry.									
+																																			THEN 5 -- same category but has > 5% difference in BMI value. we want to keep this record.
+				-- same day reading, less than 5% BMI difference in BMI value, BUT has change of 1 BMI category. We want to keep, but flag them in case:
+				WHEN (dt_diff_before = 0 	AND  dt_diff_after = 0) -- same reading from the previous and next entry.
+				AND (val_diff_before/bmi_val) < SAILWXXXXV.BMI_SAME_DAY -- less than 5% BMI value from previous entry
+					--OR (val_diff_after/bmi_val) < SAILWXXXXV.BMI_SAME_DAY)
+				AND cat_diff_before >= 1	-- different BMI category																						
+																																			THEN 6	-- different category, has < 5% difference in BMI value. We want to keep this record.
+				ELSE NULL END
 		END AS bmi_flg				
 	FROM 
 		(
 		SELECT DISTINCT 
-			alf_e -- all the ALFs on our adult cohort.
+			alf_e -- all the ALFs on our adult cohort
 		FROM
-			SAILWXXXXV.BMI_COMBO_ADULTS
+			SAILWXXXXV.BMI_COMBO
 		) a
 	LEFT JOIN
 		( -- identifying the changes in BMI categories/BMI values for same-day / over time period.
@@ -1784,209 +1401,39 @@ INSERT INTO SAILWXXXXV.BMI_UNCLEAN_ADULTS
 			abs(DAYS_BETWEEN(bmi_dt,(lag(bmi_dt)	OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))) 	AS dt_diff_before, 		-- identifies number of days passed from previous reading
 			abs(DAYS_BETWEEN(bmi_dt,(lead(bmi_dt) 	OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))) 	AS dt_diff_after 		-- identifies number of days passed with next reading
 		FROM 
-			SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1
-		-- these are the entries we want to keep:
-		WHERE 
-			bmi_flg = 5 OR bmi_flg = 6 OR bmi_flg IS NULL
+			SAILWXXXXV.BMI_COMBO
 		) b
 	USING (alf_e)
-;
+),
+t2 AS (
+-- remove those flagged as 1 or 3 because those entries do not meet our threshold for consistency.
+SELECT
+	*
+FROM
+	T1
+WHERE bmi_flg IS NULL OR bmi_flg = 5 OR bmi_flg = 6
+)
+-- order the entries by most important source rank and least bmi_flg
+-- this is saved as a table so researchers can have a look at the table later
+SELECT
+	*,
+	-- arrange entries by source_rank and bmi_flg
+	ROW_NUMBER () OVER (PARTITION BY alf_e, bmi_dt ORDER BY source_rank, bmi_flg) AS counts
+FROM
+	t2;
 
 COMMIT;
 
+-----------------------------------
+-- 7.2 Selecting one entry per day using source type and bmi_flg and identifying inconsistent entries over time
+-----------------------------------
+CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_UNCLEAN_OVERTIME');
 
-SELECT '1' AS row_no, count(DISTINCT alf_e) AS ALFs, count(*) AS counts FROM SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1
-WHERE bmi_flg = 1
-UNION 
-SELECT '2' AS row_no, count(DISTINCT alf_e) AS ALFs, count(*) AS counts FROM SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1
-WHERE bmi_flg = 3
-UNION 
-SELECT '5' AS row_no, count(DISTINCT alf_e) AS ALFs, count(*) AS counts FROM SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1
-WHERE bmi_flg = 5
-UNION 
-SELECT '6' AS row_no, count(DISTINCT alf_e) AS ALFs, count(*) AS counts FROM SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1
-WHERE bmi_flg = 6;
-
-
-SELECT '3' AS row_no, count(DISTINCT alf_e) AS ALFs, count(*) AS counts FROM SAILWXXXXV.BMI_UNCLEAN_ADULTS
-WHERE bmi_flg = 2
-UNION 
-SELECT '4' AS row_no, count(DISTINCT alf_e) AS ALFs, count(*) AS counts FROM SAILWXXXXV.BMI_UNCLEAN_ADULTS
-WHERE bmi_flg = 4
-UNION
-SELECT '5' AS row_no, count(DISTINCT alf_e) AS ALFs, count(*) AS counts FROM SAILWXXXXV.BMI_UNCLEAN_ADULTS
-WHERE bmi_flg = 5
-UNION 
-SELECT '6' AS row_no, count(DISTINCT alf_e) AS ALFs, count(*) AS counts FROM SAILWXXXXV.BMI_UNCLEAN_ADULTS
-WHERE bmi_flg = 6;
-
-
-----------------------------------------
--- Stage 5. Output table
-----------------------------------------
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_CLEAN_ADULTS_STAGE_1');
-
-CREATE TABLE SAILWXXXXV.BMI_CLEAN_ADULTS_STAGE_1  -- this table selects entries that are NOT flagged in the previous step.
-(
-		alf_e        	BIGINT,
-		sex				CHAR(1),
-		wob				DATE,
-		age_months		INTEGER,
-		age_years		INTEGER,
-		age_band		VARCHAR(100),
-		bmi_dt     		DATE,
-		bmi_cat			VARCHAR(20),
-		bmi_val			DECIMAL(5),
-		height			DECIMAL(31,8),
-		weight			INTEGER,
-		source_type		VARCHAR(50),
-		source_rank		SMALLINT,
-		source_db		CHAR(4),
-		active_from		DATE,
-		active_to		DATE,
-		dod				DATE,
-		follow_up_dod	INTEGER,
-		follow_up_res	INTEGER,
-		bmi_flg			CHAR(1)
-)
-DISTRIBUTE BY HASH(alf_e);
-
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_CLEAN_ADULTS_STAGE_1  with distribution and detailed indexes all');
-COMMIT; 
-
-INSERT INTO SAILWXXXXV.BMI_CLEAN_ADULTS_STAGE_1
+CREATE TABLE SAILWXXXXV.BMI_UNCLEAN_OVERTIME AS (
+WITH t1 AS  (
+-- FIRST we ONLY choose the entry WITH least SOURCE RANK AND least bmi_flg
 SELECT
 	alf_e,
-	sex,
-	wob,
-	age_months,
-	age_years,
-	age_band,
-	bmi_dt,
-	CASE
-		WHEN bmi_val IS NOT NULL THEN -- reiterating the BMI categories for BMI values.
-		CASE
-			WHEN bmi_val < 18.5 									THEN 'Underweight'
-			WHEN bmi_val >=18.5   AND bmi_val < 25 					THEN 'Normal weight'
-			WHEN bmi_val >= 25.0  AND bmi_val < 30 					THEN 'Overweight'
-			WHEN bmi_val >= 30.0 									THEN 'Obese'
-			ELSE NULL END
-		WHEN bmi_val IS NULL THEN -- reiterating the BMI categories from source types.
-		CASE
-			WHEN source_type = 'bmi category'						THEN BMI_CAT
-			WHEN source_type = 'ICD-10'								THEN 'Obese'
-			ELSE NULL END
-	END AS bmi_cat,
-	bmi_val,
-	height,
-	weight,
-	source_type,
-	source_rank,
-	source_db,
-	active_from,
-	active_to,
-	dod,
-	follow_up_dod,
-	follow_up_res,
-	bmi_flg
-FROM
-	(
-	SELECT DISTINCT
-		*,
-		ROW_NUMBER() OVER (PARTITION BY alf_e, bmi_dt ORDER BY source_rank) AS counts -- to identify the duplicates
-	FROM
-		(
-		SELECT DISTINCT 
-			a.alf_e,
-			sex,
-			wob,
-			age_months,
-			age_years,
-			age_band,
-			a.bmi_dt,
-			bmi_cat,
-			bmi_val,
-			height,
-			weight,
-			source_type,
-			a.source_rank,
-			source_db,
-			active_from,
-			active_to,
-			dod,
-			follow_up_dod,
-			follow_up_res,
-			bmi_flg	
-		FROM
-			(
-	--		SELECT count(*)
-	--		FROM
-	--		(
-			SELECT DISTINCT-- our ADULTS cohort
-				alf_e,
-				bmi_dt,
-				min(source_rank) AS source_rank -- choose the entry with highest hierarchical rank
-			FROM
-				SAILWXXXXV.BMI_UNCLEAN_ADULTS
-			GROUP BY
-				alf_e,
-				bmi_dt,
-				bmi_flg
-			ORDER BY
-				alf_e,
-				bmi_dt 
-			) a
-		LEFT JOIN 
-			SAILWXXXXV.BMI_UNCLEAN_ADULTS c
-		ON a.alf_e = c.alf_e AND a.bmi_dt=c.bmi_dt AND a.source_rank = c.source_rank
-		WHERE 
-			bmi_flg IS NULL OR bmi_flg = 5 OR bmi_flg = 6 -- we want to only include entries that are not flagged OR have bmi_flg 5 OR 6.
-		) 
-	)
-WHERE 
-	counts = 1 -- remove duplicates brought by the LEFT JOIN.
-ORDER BY 
-	alf_e, 
-	bmi_dt;
-
----------------------------------------------------------------
--- Adding pregnancy flags.
----------------------------------------------------------------
-CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_CLEAN_ADULTS');
-
-CREATE TABLE SAILWXXXXV.BMI_CLEAN_ADULTS  -- here we only select entries that are NOT flagged in the previous step.
-(
-		alf_e        	BIGINT,
-		sex				CHAR(1),
-		wob				DATE,
-		age_months		INTEGER,
-		age_years		INTEGER,
-		age_band		VARCHAR(100),
-		bmi_dt     		DATE,
-		bmi_cat			VARCHAR(100),
-		bmi_val			DECIMAL(5),
-		height			DECIMAL(31,8),
-		weight			INTEGER,
-		source_type		VARCHAR(50),
-		source_rank		CHAR(1),
-		source_db		CHAR(4),
-		active_from		DATE,
-		active_to		DATE,
-		dod				DATE,
-		follow_up_dod	INTEGER,
-		follow_up_res	INTEGER,
-		bmi_flg			CHAR(1),
-		bmi_year		VARCHAR(4),
-		pregnancy_flg	VARCHAR(100)
-)
-DISTRIBUTE BY HASH(alf_e);
-
-CALL SYSPROC.ADMIN_CMD('runstats on table SAILWXXXXV.BMI_CLEAN_ADULTS  with distribution and detailed indexes all');
-COMMIT; 
-
-INSERT INTO SAILWXXXXV.BMI_CLEAN_ADULTS
-	SELECT
-		alf_e,
 		sex,
 		wob,
 		age_months,
@@ -1994,32 +1441,174 @@ INSERT INTO SAILWXXXXV.BMI_CLEAN_ADULTS
 		age_band,
 		bmi_dt,
 		bmi_cat,
+		bmi_c,
 		bmi_val,
 		height,
 		weight,
 		source_type,
 		source_rank,
 		source_db,
-		active_from,
-		active_to,
-		dod,
-		follow_up_dod,
-		follow_up_res,
-		bmi_flg,
-		YEAR(bmi_dt) AS bmi_year, -- will be used for yearly counts
-		pregnancy_flg
-	FROM
+		bmi_flg
+FROM SAILWXXXXV.BMI_UNCLEAN_SAMEDAY
+WHERE counts = 1
+),
+t2 AS (
+-- now we apply the over-time cleaning formula
+SELECT
+	*, -- all columns from the unclean_same_day table
+	CASE 
+		WHEN bmi_flg IS NOT NULL THEN bmi_flg -- carries over the bmi_flg from previous table if they have it
+		WHEN BMI_VAL IS NULL THEN -- only BMI categories recorded
+			CASE
+				WHEN (dt_diff_before != 0 		AND cat_diff_before/dt_diff_before > SAILWXXXXV.BMI_RATE   	AND cat_diff_before > 1) 
+						OR 	 (dt_diff_after != 0 	AND cat_diff_after/dt_diff_after > SAILWXXXXV.BMI_RATE    	AND cat_diff_after > 1) 	THEN 2 -- more than 0.3% rate of CHANGE
+			ELSE NULL END 
+		WHEN BMI_VAL IS NOT NULL THEN -- BMI values were recorded.
+			CASE
+			-- different day readings with more than .3% change of BMI value per day AND more than 1 category change.
+					WHEN (dt_diff_before != 0 	AND ((val_diff_before/bmi_val)/dt_diff_before) > SAILWXXXXV.BMI_RATE   AND cat_diff_before > 1) 
+						OR (dt_diff_after != 0 	AND ((val_diff_after/bmi_val)/dt_diff_after) > SAILWXXXXV.BMI_RATE    AND cat_diff_after > 1) 	THEN 4  -- more than 0.3% rate of change over time.
+			ELSE NULL END
+		END AS bmi_flg_over_time			
+	FROM 
 		(
+		SELECT DISTINCT 
+			alf_e -- all the ALFs on our adult cohort.
+		FROM
+			T1
+		) a
+	LEFT JOIN
+		( -- identifying the changes in BMI categories/BMI values for same-day / over time period.
+		  -- we sequence entries on BMI_DT, BMI_VAL and BMI_C in order to compare the values in a more standardised manner
+		  -- there should be 1 entry from each day at this point.
+		SELECT 
+			*,
+			abs(bmi_val - (lag(bmi_val) 			OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))		AS val_diff_before, 	-- identifies changes in bmi value from previous reading
+			abs(dec(bmi_val - (lead(bmi_val) 		OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))) 	AS val_diff_after, 		-- identifies changes in bmi_value with next reading
+			abs(bmi_c - (lag(bmi_c) 				OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c))) 	AS cat_diff_before, 	-- identifies changes in bmi category from previous reading
+			abs(bmi_c - (lead(bmi_c) 				OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c))) 	AS cat_diff_after, 		-- identifies changes in bmi category with next reading
+			abs(DAYS_BETWEEN(bmi_dt,(lag(bmi_dt)	OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))) 	AS dt_diff_before, 		-- identifies number of days passed from previous reading
+			abs(DAYS_BETWEEN(bmi_dt,(lead(bmi_dt) 	OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))) 	AS dt_diff_after 		-- identifies number of days passed with next reading
+		FROM 
+			t1
+		) b
+	USING (alf_e)
+)
+-- this will show the table with those flagged inconsistent over time.
+-- we want to keep this table so the researchers can look at it for later.
+SELECT
+	*
+FROM
+t2
+) WITH NO DATA;
+
+INSERT INTO SAILWXXXXV.BMI_UNCLEAN_OVERTIME
+WITH t1 AS  (
+-- FIRST we ONLY choose the entry WITH least SOURCE RANK AND least bmi_flg
+SELECT
+	alf_e,
+		sex,
+		wob,
+		age_months,
+		age_years,
+		age_band,
+		bmi_dt,
+		bmi_cat,
+		bmi_c,
+		bmi_val,
+		height,
+		weight,
+		source_type,
+		source_rank,
+		source_db,
+		bmi_flg
+FROM SAILWXXXXV.BMI_UNCLEAN_SAMEDAY
+WHERE counts = 1
+),
+t2 AS (
+-- now we apply the over-time cleaning formula
+SELECT
+	*, -- all columns from the unclean_same_day table
+	CASE 
+		WHEN bmi_flg IS NOT NULL THEN bmi_flg -- carries over the bmi_flg from previous table if they have it
+		WHEN BMI_VAL IS NULL THEN -- only BMI categories recorded
+			CASE
+				WHEN (dt_diff_before != 0 		AND cat_diff_before/dt_diff_before > SAILWXXXXV.BMI_RATE   	AND cat_diff_before > 1) 
+						OR 	 (dt_diff_after != 0 	AND cat_diff_after/dt_diff_after > SAILWXXXXV.BMI_RATE    	AND cat_diff_after > 1) 	THEN 2 -- more than 0.3% rate of CHANGE
+			ELSE NULL END 
+		WHEN BMI_VAL IS NOT NULL THEN -- BMI values were recorded.
+			CASE
+			-- different day readings with more than .3% change of BMI value per day AND more than 1 category change.
+					WHEN (dt_diff_before != 0 	AND ((val_diff_before/bmi_val)/dt_diff_before) > SAILWXXXXV.BMI_RATE   AND cat_diff_before > 1) 
+						OR (dt_diff_after != 0 	AND ((val_diff_after/bmi_val)/dt_diff_after) > SAILWXXXXV.BMI_RATE    AND cat_diff_after > 1) 	THEN 4  -- more than 0.3% rate of change over time.
+			ELSE NULL END
+		END AS bmi_flg_over_time			
+	FROM 
+		(
+		SELECT DISTINCT 
+			alf_e -- all the ALFs on our adult cohort.
+		FROM
+			T1
+		) a
+	LEFT JOIN
+		( -- identifying the changes in BMI categories/BMI values for same-day / over time period.
+		  -- we sequence entries on BMI_DT, BMI_VAL and BMI_C in order to compare the values in a more standardised manner
+		  -- there should be 1 entry from each day at this point.
+		SELECT 
+			*,
+			abs(bmi_val - (lag(bmi_val) 			OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))		AS val_diff_before, 	-- identifies changes in bmi value from previous reading
+			abs(dec(bmi_val - (lead(bmi_val) 		OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))) 	AS val_diff_after, 		-- identifies changes in bmi_value with next reading
+			abs(bmi_c - (lag(bmi_c) 				OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c))) 	AS cat_diff_before, 	-- identifies changes in bmi category from previous reading
+			abs(bmi_c - (lead(bmi_c) 				OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c))) 	AS cat_diff_after, 		-- identifies changes in bmi category with next reading
+			abs(DAYS_BETWEEN(bmi_dt,(lag(bmi_dt)	OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))) 	AS dt_diff_before, 		-- identifies number of days passed from previous reading
+			abs(DAYS_BETWEEN(bmi_dt,(lead(bmi_dt) 	OVER (PARTITION BY alf_e ORDER BY bmi_dt, bmi_val, bmi_c)))) 	AS dt_diff_after 		-- identifies number of days passed with next reading
+		FROM 
+			t1
+		) b
+	USING (alf_e)
+)
+-- this will show the table with those flagged inconsistent over time.
+-- we want to keep this table so the researchers can look at it for later.
+SELECT
+	*
+FROM
+t2;
+
+COMMIT;
+
+-----------------------------------------------
+-- Section 8. Creating the output table for adults.
+-----------------------------------------------
+
+-- here we only select those entries that are not flagged as 2 or 4 (inconsistent over time) and add pregnancy flags
+CALL FNC.DROP_IF_EXISTS ('SAILWXXXXV.BMI_CLEAN');
+
+CREATE TABLE SAILWXXXXV.BMI_CLEAN AS (
+WITH t1 AS (
+-- FIRST we remove the entries labelled AS inconsistent FROM previous TABLE
+SELECT
+	*
+FROM 
+	SAILWXXXXV.BMI_UNCLEAN_OVERTIME
+WHERE BMI_FLG_OVER_TIME IS NULL OR BMI_FLG_OVER_TIME = 5 OR BMI_FLG_OVER_TIME = 6
+),
+t2 AS (
+-- NEXT we ADD pregnancy flags
+SELECT
+	*,
+	YEAR(bmi_dt) AS bmi_year,
+	row_number() OVER (PARTITION BY alf_e, bmi_dt ORDER BY alf_e, bmi_dt) AS counts
+FROM
+	(
 		SELECT DISTINCT
 			a.*, -- everything from STAGE_1 table.
 			CASE 
 				WHEN (DAYS_BETWEEN (bmi_dt, BABY_BIRTH_DT))  <= -1 		AND (DAYS_BETWEEN (bmi_dt, e.BABY_BIRTH_DT)) > -294 		THEN 'pre-natal' -- 42 weeks before birth
 				WHEN (DAYS_BETWEEN (bmi_dt, BABY_BIRTH_DT)) BETWEEN 1 	AND 294 													THEN 'post-natal' -- 42 weeks after birth
 				ELSE NULL 
-				END AS pregnancy_flg, -- this is to  indicate whether the weight recorded is pregnancy related.
-			ROW_NUMBER() OVER (PARTITION BY a.alf_e, a.bmi_dt ORDER BY a.source_rank) AS counts
+				END AS pregnancy_flg -- this is to  indicate whether the weight recorded is pregnancy related.
 		FROM 
-			SAILWXXXXV.BMI_CLEAN_ADULTS_STAGE_1 a
+			t1 a
 		LEFT JOIN 
 			SAILWXXXXV.BMI_ALG_MIDS_BIRTH e
 		ON a.alf_e = e.MOTHER_alf_e
@@ -2027,24 +1616,66 @@ INSERT INTO SAILWXXXXV.BMI_CLEAN_ADULTS
 		UNION
 		SELECT
 			a.*,
-			'pre-natal' AS PREGNANCY_FLG,
-			ROW_NUMBER() OVER (PARTITION BY alf_e, bmi_dt ORDER BY source_rank) AS counts
+			'pre-natal' AS PREGNANCY_FLG
+			--ROW_NUMBER() OVER (PARTITION BY alf_e, bmi_dt ORDER BY source_rank) AS counts
 		FROM 
-			SAILWXXXXV.BMI_CLEAN_ADULTS_STAGE_1 a
+			SAILWXXXXV.BMI_UNCLEAN_OVERTIME a
 		WHERE source_db = 'MIDS' -- all entries from MIDS are pre-natal.
-		) 
-	WHERE counts = 1 -- removes duplicates created from pregnancy_flgs.
-;
+		)
+	)
+SELECT
+	*
+FROM
+	T2
+WHERE counts = 1
+) WITH NO DATA;
 
-COMMIT;
+INSERT INTO SAILWXXXXV.BMI_CLEAN
+WITH t1 AS (
+-- FIRST we remove the entries labelled AS inconsistent FROM previous TABLE
+SELECT
+	*
+FROM 
+	SAILWXXXXV.BMI_UNCLEAN_OVERTIME
+WHERE BMI_FLG_OVER_TIME IS NULL OR BMI_FLG_OVER_TIME = 5 OR BMI_FLG_OVER_TIME = 6
+),
+t2 AS (
+-- NEXT we ADD pregnancy flags
+SELECT
+	*,
+	YEAR(bmi_dt) AS bmi_year,
+	row_number() OVER (PARTITION BY alf_e, bmi_dt ORDER BY alf_e, bmi_dt) AS counts
+FROM
+	(
+		SELECT DISTINCT
+			a.*, -- everything from STAGE_1 table.
+			CASE 
+				WHEN (DAYS_BETWEEN (bmi_dt, BABY_BIRTH_DT))  <= -1 		AND (DAYS_BETWEEN (bmi_dt, e.BABY_BIRTH_DT)) > -294 		THEN 'pre-natal' -- 42 weeks before birth
+				WHEN (DAYS_BETWEEN (bmi_dt, BABY_BIRTH_DT)) BETWEEN 1 	AND 294 													THEN 'post-natal' -- 42 weeks after birth
+				ELSE NULL 
+				END AS pregnancy_flg -- this is to  indicate whether the weight recorded is pregnancy related.
+		FROM 
+			t1 a
+		LEFT JOIN 
+			SAILWXXXXV.BMI_ALG_MIDS_BIRTH e
+		ON a.alf_e = e.MOTHER_alf_e
+		WHERE source_db != 'MIDS' -- entries from databases that are not MIDS could be pre/post/null.
+		UNION
+		SELECT
+			a.*,
+			'pre-natal' AS PREGNANCY_FLG
+			--ROW_NUMBER() OVER (PARTITION BY alf_e, bmi_dt ORDER BY source_rank) AS counts
+		FROM 
+			SAILWXXXXV.BMI_UNCLEAN_OVERTIME a
+		WHERE source_db = 'MIDS' -- all entries from MIDS are pre-natal.
+		)
+	)
+SELECT
+	*
+FROM
+	T2
+WHERE counts = 1;
 
-SELECT * FROM SAILWXXXXV.BMI_UNCLEAN_ADULTS_STAGE_1;
-SELECT * FROM SAILWXXXXV.BMI_UNCLEAN_ADULTS;
-SELECT * FROM SAILWXXXXV.BMI_CLEAN_ADULTS;
-
-
-
---------------------------------------------------------------
--- END OF CODE --
---------------------------------------------------------------
-
+SELECT * FROM SAILWXXXXV.BMI_UNCLEAN_SAMEDAY;
+SELECT * FROM SAILWXXXXV.BMI_UNCLEAN_OVERTIME;
+SELECT * FROM SAILWXXXXV.BMI_CLEAN;

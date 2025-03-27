@@ -9,7 +9,7 @@ Filename 1.0 Extracting entries from each database:
 ---------------------------------------------------------------------------------------------
 STAGE 1.1 - Parameter definitions and extraction.
 The following inputs are needed from the user:
-1. cohort table - specify a table with your ALFs, their WOB and sex.
+1. cohort table - specify a table with your ALFs, their WOB and sex (for the version with cohort input).
 2. project code - replace XXXX with your project code using ctrl + f.
 3. ALF format   - this is currently set as ALF_PE, replace as appropriate using ctrl + f.
 4. SPELL_NUM format - this is currently set as SPELL_NUM_PE, replace as appropriate using ctrl + f.

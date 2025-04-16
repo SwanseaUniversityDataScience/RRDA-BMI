@@ -38,7 +38,7 @@ A manuscript for this work has been submitted to BMJ Open for publication.
 This repository holds the BMI algorithm which can be impelemented in any data environment following these steps and correct setting of parameters:
 * To extract data from base data sources see <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/ReadMe-Adult.md">this</a> for adults and <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/CYP%20code/ReadMe-CYP.md">this</a> for CYP.
 * To combine and clean data see <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/Adults.sql">this</a> for adults and  <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/CYP%20code/CYP.sql">this</a> for CYP.<br>
-* Same day record cleaning line 1473 <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/Adults.sql">here</a>.<br>
+* Same day record cleaning line 1479 <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/Adults.sql">here</a>.<br>
 
 ![Same-day cleaning example](https://github.com/user-attachments/assets/6d2afc98-ea66-48f0-883d-a28d1a877b25)
 

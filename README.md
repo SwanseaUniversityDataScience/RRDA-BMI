@@ -1,6 +1,8 @@
+![Logo will be here]()
+
 # Bridging the gap: Development of a methodology for retrieving and harmonising Body Mass Index (BMI) from population-level linked electronic health records.
 
-### Michael Jeanne Childs <sup>1*</sup> , Sarah J Aldridge <sup>1</sup>, Helen Daniels <sup>1</sup>, Gareth Davies <sup>1</sup>, Victoria Best <sup>1</sup>, Hoda Abbasizanjani <sup>1</sup>, Ronan A Lyons <sup>1</sup>, Fatemeh Torabi <sup>1a</sup>, Ashley Akbari <sup>1a</sup> <br>
+### Michael Jeanne Childs <sup>1</sup> , Sarah J Aldridge <sup>1</sup>, Helen Daniels <sup>1</sup>, Gareth Davies <sup>1</sup>, Victoria Best <sup>1</sup>, Hoda Abbasizanjani <sup>1</sup>, Ronan A Lyons <sup>1</sup>, Ashley Akbari <sup>1a</sup>, Fatemeh Torabi <sup>*1a</sup>,<br>
  
 <sup>1</sup> Population Data Science, Swansea University Medical School, Faculty of Medicine, Health & Life Science, Swansea University, Wales, UK. SA2 8PP.<br> 
 
@@ -17,7 +19,20 @@
 
 **Conclusions** Our findings highlight the significant variations in BMI data availability and retention across different age groups and time periods within EHR in Wales. In conclusion, our methodology offers a reproducible and sustainable framework for extracting and harmonising BMI data. Promoting the adoption of such methods can enhance standardised approaches in utilising accessible measures like BMI to assess disease risk in population-based studies, thereby advancing public health initiatives and research efforts.
 
-### Content
+### Funding
+This work was supported by the Con-COV team funded by the Medical Research Council (grant number: MR/V028367/1). This work was supported by Health Data Research UK, which receives its funding from HDR UK Ltd (HDR-9006) funded by the UK Medical Research Council, Engineering and Physical Sciences Research Council, Economic and Social Research Council, Department of Health and Social Care (England), Chief Scientist Office of the Scottish Government Health and Social Care Directorates, Health and Social Care Research and Development Division (Welsh Government), Public Health Agency (Northern Ireland), British Heart Foundation (BHF) and the Wellcome Trust. This work was supported by the ADR Wales programme of work. The ADR Wales programme of work is aligned to the priority themes as identified in the Welsh Government’s national strategy: Prosperity for All. ADR Wales brings together data science experts at Swansea University Medical School, staff from the Wales Institute of Social and Economic Research, Data and Methods (WISERD) at Cardiff University and specialist teams within the Welsh Government to develop new evidence which supports Prosperity for All by using the SAIL Databank at Swansea University, to link and analyse anonymised data. ADR Wales is part of the Economic and Social Research Council (part of UK Research and Innovation) funded ADR UK (grant ES/W012227/1).
+
+### Acknowledgements
+This work uses data provided by patients and collected by the NHS as part of their care and support. We would also like to acknowledge all data providers who make anonymised data available for research.
+We wish to acknowledge the collaborative partnership that enabled acquisition and access to the de-identified data, which led to this output. The collaboration was led by the Swansea University Health Data Research UK team under the direction of the Welsh Government Technical Advisory Cell (TAC) and includes the following groups and organisations: the Secure Anonymised Information Linkage (SAIL) Databank, Administrative Data Research (ADR) Wales, Digital Health and Care Wales (DHCW formerly NHS Wales Informatics Service (NWIS)), Public Health Wales, NHS Shared Services and the Welsh Ambulance Service Trust (WAST). We wish to acknowledge our colleagues Rowena Griffiths and Stuart Bedston for their contributions.
+
+### Project Approval
+This analysis uses the de-identified patient data accessed within the SAIL Databank trusted research environment and was approved by the SAIL independent Information Governance Review Panel (IGRP number: 0911).Further details could be found on the SAIL Databank website (https://saildatabank.com/).
+
+### Dissemination
+A manuscript for this work has been submitted to BMJ Open for publication.
+
+### Repository Content
 
 This repository holds the BMI algorithm which can be impelemented in any data environment following these steps and correct setting of parameters:
 * To extract data from base data sources see <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/ReadMe-Adult.md">this</a> for adults and <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/CYP%20code/ReadMe-CYP.md">this</a> for CYP.
@@ -29,4 +44,7 @@ This repository holds the BMI algorithm which can be impelemented in any data en
 * If you are using this for a limited number of cohort and want to filter by your cohort participants at the start follow <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/Adult%20code/V3%20-%20Adults%20with%20cohort%20input.sql">this</a> for adults or <a href="https://github.com/SwanseaUniversityDataScience/RRDA-BMI/blob/main/Methodology/CYP%20code/V3%20-%20CYP%20with%20cohort%20input.sql">this</a> for CYP.
 
 
-If you are interested in development and collaboration on this work please get in touch with the lead and senior authors<br>
+If you are interested in development and collaboration on this work please get in touch with the corresponding author and senior authors<br>
+
+### License
+This work is licensed under a Creative Commons Attribution 4.0 International License. 

@@ -1,4 +1,5 @@
-![Logo will be here]()
+![Swansea_PopDataScience_logo](https://github.com/user-attachments/assets/163575af-8fa2-44be-98da-3cf25c688492)
+
 
 # Bridging the gap: Development of a methodology for retrieving and harmonising Body Mass Index (BMI) from population-level linked electronic health records.
 
